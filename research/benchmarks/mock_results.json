@@ -1,0 +1,110 @@
+[
+  {
+    "framework": "LangGraph",
+    "task": "\u7b80\u5355\u95ee\u7b54",
+    "success": true,
+    "execution_time": 0.5050759315490723,
+    "token_count": 1000,
+    "error": null,
+    "steps_count": 3
+  },
+  {
+    "framework": "AutoGen",
+    "task": "\u7b80\u5355\u95ee\u7b54",
+    "success": true,
+    "execution_time": 0.7017598152160645,
+    "token_count": 1200,
+    "error": null,
+    "steps_count": 4
+  },
+  {
+    "framework": "CrewAI",
+    "task": "\u7b80\u5355\u95ee\u7b54",
+    "success": true,
+    "execution_time": 0.6050510406494141,
+    "token_count": 900,
+    "error": null,
+    "steps_count": 4
+  },
+  {
+    "framework": "LangGraph",
+    "task": "\u4fe1\u606f\u68c0\u7d22",
+    "success": true,
+    "execution_time": 1.002206802368164,
+    "token_count": 2000,
+    "error": null,
+    "steps_count": 3
+  },
+  {
+    "framework": "AutoGen",
+    "task": "\u4fe1\u606f\u68c0\u7d22",
+    "success": true,
+    "execution_time": 1.4039087295532227,
+    "token_count": 2400,
+    "error": null,
+    "steps_count": 4
+  },
+  {
+    "framework": "CrewAI",
+    "task": "\u4fe1\u606f\u68c0\u7d22",
+    "success": true,
+    "execution_time": 1.2050590515136719,
+    "token_count": 1800,
+    "error": null,
+    "steps_count": 4
+  },
+  {
+    "framework": "LangGraph",
+    "task": "\u4ee3\u7801\u751f\u6210",
+    "success": true,
+    "execution_time": 1.5034489631652832,
+    "token_count": 3000,
+    "error": null,
+    "steps_count": 3
+  },
+  {
+    "framework": "AutoGen",
+    "task": "\u4ee3\u7801\u751f\u6210",
+    "success": true,
+    "execution_time": 2.1050729751586914,
+    "token_count": 3600,
+    "error": null,
+    "steps_count": 4
+  },
+  {
+    "framework": "CrewAI",
+    "task": "\u4ee3\u7801\u751f\u6210",
+    "success": true,
+    "execution_time": 1.8050591945648193,
+    "token_count": 2700,
+    "error": null,
+    "steps_count": 4
+  },
+  {
+    "framework": "LangGraph",
+    "task": "\u590d\u6742\u5206\u6790",
+    "success": true,
+    "execution_time": 2.0050699710845947,
+    "token_count": 4000,
+    "error": null,
+    "steps_count": 3
+  },
+  {
+    "framework": "AutoGen",
+    "task": "\u590d\u6742\u5206\u6790",
+    "success": true,
+    "execution_time": 2.801624059677124,
+    "token_count": 4800,
+    "error": null,
+    "steps_count": 4
+  },
+  {
+    "framework": "CrewAI",
+    "task": "\u590d\u6742\u5206\u6790",
+    "success": true,
+    "execution_time": 2.405060291290283,
+    "token_count": 3600,
+    "error": null,
+    "steps_count": 4
+  }
+]
