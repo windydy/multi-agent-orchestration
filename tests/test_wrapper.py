@@ -56,7 +56,7 @@ class TestClaudeSDKConfig:
         """测试默认配置"""
         config = ClaudeSDKConfig()
         
-        assert config.model == "glm-5"  # 默认使用 glm-5
+        assert config.model == "qwen3.6-plus"  # 默认使用 qwen3.6-plus
         assert config.max_tokens == 4096
         assert config.temperature == 0.7
         assert config.api_key is None

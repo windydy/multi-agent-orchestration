@@ -37,7 +37,7 @@ class ClaudeToolType(Enum):
 class ClaudeSDKConfig:
     """Claude SDK配置"""
     api_key: Optional[str] = None  # None时从环境变量获取
-    model: str = "glm-5"  # 默认使用 glm-5
+    model: str = "qwen3.6-plus"  # 默认使用 qwen3.6-plus
     max_tokens: int = 4096
     temperature: float = 0.7
     tools: list[ClaudeToolType] = field(default_factory=lambda: [
@@ -50,7 +50,7 @@ class ClaudeSDKConfig:
     base_url: Optional[str] = None  # 自定义API endpoint
     provider: str = "anthropic"  # anthropic / dashscope
     
-    # DashScope 配置（glm-5 默认）
+    # DashScope 配置（qwen3.6-plus 默认）
     DASHSCOPE_BASE_URL: str = "https://coding.dashscope.aliyuncs.com/apps/anthropic"
     DASHSCOPE_ENV_KEY: str = "DASHSCOPE_API_KEY"
 

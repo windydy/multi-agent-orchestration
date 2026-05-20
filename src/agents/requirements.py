@@ -47,7 +47,7 @@ class RequirementsAgent(ClaudeAgentWrapper):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "glm-5",
+        model: str = "qwen3.6-plus",
         hooks: list = None
     ):
         config = AgentConfig(
@@ -82,7 +82,7 @@ class RequirementsAgent(ClaudeAgentWrapper):
 
 def create_requirements_agent(
     api_key: Optional[str] = None,
-    model: str = "glm-5",
+    model: str = "qwen3.6-plus",
     custom_hooks: list = None
 ) -> RequirementsAgent:
     """创建需求分析Agent

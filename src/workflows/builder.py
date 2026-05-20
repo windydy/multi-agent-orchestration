@@ -50,13 +50,13 @@ class PipelineConfig:
     # API配置
     api_key: Optional[str] = None
     
-    # 模型配置 (默认使用 glm-5)
-    requirements_model: str = "glm-5"
-    designer_model: str = "glm-5"
-    developer_model: str = "glm-5"
-    reviewer_model: str = "glm-5"
-    tester_model: str = "glm-5"
-    fixer_model: str = "glm-5"
+    # 模型配置 (默认使用 qwen3.6-plus)
+    requirements_model: str = "qwen3.6-plus"
+    designer_model: str = "qwen3.6-plus"
+    developer_model: str = "qwen3.6-plus"
+    reviewer_model: str = "qwen3.6-plus"
+    tester_model: str = "qwen3.6-plus"
+    fixer_model: str = "qwen3.6-plus"
     
     # 执行配置
     max_iterations: int = 10       # 最大迭代次数（防止死循环）

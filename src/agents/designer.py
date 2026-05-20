@@ -68,7 +68,7 @@ class DesignerAgent(ClaudeAgentWrapper):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "glm-5",
+        model: str = "qwen3.6-plus",
         hooks: list = None
     ):
         config = AgentConfig(
@@ -103,7 +103,7 @@ class DesignerAgent(ClaudeAgentWrapper):
 
 def create_designer_agent(
     api_key: Optional[str] = None,
-    model: str = "glm-5",
+    model: str = "qwen3.6-plus",
     custom_hooks: list = None
 ) -> DesignerAgent:
     """创建技术设计Agent

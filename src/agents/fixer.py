@@ -70,7 +70,7 @@ class FixerAgent(ClaudeAgentWrapper):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "glm-5",
+        model: str = "qwen3.6-plus",
         hooks: list = None
     ):
         config = AgentConfig(
@@ -106,7 +106,7 @@ class FixerAgent(ClaudeAgentWrapper):
 
 def create_fixer_agent(
     api_key: Optional[str] = None,
-    model: str = "glm-5",
+    model: str = "qwen3.6-plus",
     custom_hooks: list = None
 ) -> FixerAgent:
     """创建Fixer Agent

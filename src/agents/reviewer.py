@@ -75,7 +75,7 @@ class ReviewerAgent(ClaudeAgentWrapper):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "glm-5",
+        model: str = "qwen3.6-plus",
         hooks: list = None
     ):
         config = AgentConfig(
@@ -109,7 +109,7 @@ class ReviewerAgent(ClaudeAgentWrapper):
 
 def create_reviewer_agent(
     api_key: Optional[str] = None,
-    model: str = "glm-5",
+    model: str = "qwen3.6-plus",
     custom_hooks: list = None
 ) -> ReviewerAgent:
     """创建Reviewer Agent

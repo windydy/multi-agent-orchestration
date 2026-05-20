@@ -80,7 +80,7 @@ class TesterAgent(ClaudeAgentWrapper):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "glm-5",
+        model: str = "qwen3.6-plus",
         hooks: list = None
     ):
         config = AgentConfig(
@@ -115,7 +115,7 @@ class TesterAgent(ClaudeAgentWrapper):
 
 def create_tester_agent(
     api_key: Optional[str] = None,
-    model: str = "glm-5",
+    model: str = "qwen3.6-plus",
     custom_hooks: list = None
 ) -> TesterAgent:
     """创建Tester Agent
