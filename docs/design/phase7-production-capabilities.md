@@ -49,7 +49,7 @@
 
 ```python
 import time
-import threading
+import asyncio
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Optional
@@ -72,7 +72,7 @@ class MetricsCollector:
         self._counters: dict[str, float] = {}
         self._gauges: dict[str, float] = {}
         self._histograms: dict[str, list[float]] = {}
-        self._lock = threading.Lock()
+        self._lock = asyncio.Lock()
     
     # --- Counter (累加计数器) ---
     def increment(self, name: str, value: float = 1.0, labels: dict = None):
@@ -237,7 +237,7 @@ class Tracer:
     def __init__(self, max_spans: int = 10000):
         self._spans: dict[str, Span] = {}
         self._active_spans: dict[str, str] = {}  # span_id → parent_id
-        self._lock = threading.Lock()
+        self._lock = asyncio.Lock()
         self._max_spans = max_spans
         self._exporter = None
     
@@ -273,7 +273,7 @@ class Tracer:
         del self._spans[oldest.span_id]
 
 
-import threading
+import asyncio
 ```
 
 ---
@@ -284,7 +284,7 @@ import threading
 
 ```python
 import time
-import threading
+import asyncio
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
@@ -327,7 +327,7 @@ class CostController:
         self._running_total: float = 0.0
         self._agent_totals: dict[str, float] = {}
         self._task_totals: dict[str, float] = {}
-        self._lock = threading.Lock()
+        self._lock = asyncio.Lock()
         self._status = CostStatus.OK
         self._callbacks: list = []
     
@@ -455,7 +455,7 @@ class CostController:
 
 ```python
 import time
-import threading
+import asyncio
 from enum import Enum
 from typing import Optional
 
@@ -487,7 +487,7 @@ class CircuitBreaker:
         self._state = CircuitState.CLOSED
         self._failure_count = 0
         self._last_failure_time = 0.0
-        self._lock = threading.Lock()
+        self._lock = asyncio.Lock()
     
     def call(self, func, *args, **kwargs):
         """执行受保护的调用"""

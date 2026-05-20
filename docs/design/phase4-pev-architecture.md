@@ -1079,15 +1079,27 @@ class ExecutorRegistry:
         self._executors: dict[str, BaseExecutor] = {}
         self._capability_index: dict[ExecutorCapability, list[str]] = {}
 
-    def register(self, executor: BaseExecutor) -> None:
-        """注册一个 Executor 实例"""
+    def register(
+        self,
+        executor: BaseExecutor,
+        capabilities: Optional[list[ExecutorCapability]] = None,
+    ) -> None:
+        """注册一个 Executor 实例
+        
+        Args:
+            executor: Executor 实例
+            capabilities: 可选的能力覆盖。如果不提供，使用 executor.capabilities。
+                用于 Phase 5 ConfigurableWorkflowBuilder 通过 YAML 配置推断能力。
+        """
         self._executors[executor.executor_id] = executor
+        # 使用传入的 capabilities 或 executor 自带的 capabilities
+        caps = capabilities if capabilities is not None else executor.capabilities
         # 更新能力索引
-        for cap in executor.capabilities:
-            self._capability_index.setdefault(cap.capability, []).append(
+        for cap in caps:
+            self._capability_index.setdefault(cap, []).append(
                 executor.executor_id
             )
-        logger.info(f"Registered executor: {executor}")
+        logger.info(f"Registered executor: {executor.executor_id}")
 
     def unregister(self, executor_id: str) -> bool:
         """注销一个 Executor 实例"""
@@ -1095,12 +1107,14 @@ class ExecutorRegistry:
             return False
 
         executor = self._executors.pop(executor_id)
-        # 清理能力索引
-        for cap in executor.capabilities:
-            if cap.capability in self._capability_index:
-                self._capability_index[cap.capability] = [
+        # 清理能力索引（兼容 ExecutorCapability 枚举和 CapabilityLevel 对象）
+        caps = executor.capabilities
+        for cap in caps:
+            cap_key = cap if isinstance(cap, ExecutorCapability) else cap.capability
+            if cap_key in self._capability_index:
+                self._capability_index[cap_key] = [
                     eid
-                    for eid in self._capability_index[cap.capability]
+                    for eid in self._capability_index[cap_key]
                     if eid != executor_id
                 ]
         logger.info(f"Unregistered executor: {executor_id}")

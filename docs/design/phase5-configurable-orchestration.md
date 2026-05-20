@@ -705,6 +705,7 @@ class ConfigurableWorkflowBuilder:
         for name, cfg in self.config.executors.items():
             executor = self._create_executor(name, cfg)
             capabilities = self._infer_capabilities(name, cfg)
+            # 传入 capabilities 覆盖 executor 自带的能力声明
             self._executor_registry.register(executor, capabilities)
     
     def _create_executor(self, name: str, cfg) -> Any:
@@ -739,43 +740,115 @@ class ConfigurableWorkflowBuilder:
             model=cfg.model,
         )
     
-    def _infer_capabilities(self, name: str, cfg) -> list[str]:
-        """推断 Executor 能力声明"""
-        tool_capabilities = [f"tool:{t}" for t in (cfg.tools or [])]
-        return tool_capabilities + [f"type:{name}"]
+    def _infer_capabilities(self, name: str, cfg) -> list[ExecutorCapability]:
+        """推断 Executor 能力声明
+        
+        返回 ExecutorCapability 枚举列表，与 ExecutorRegistry.register()
+        的 capabilities 参数类型对齐。
+        """
+        from ..plan.graph import ExecutorCapability
+        
+        # type → capability 映射
+        type_to_cap = {
+            "requirements": ExecutorCapability.REQUIREMENTS_ANALYSIS,
+            "designer": ExecutorCapability.TECHNICAL_DESIGN,
+            "developer": ExecutorCapability.CODE_DEVELOPMENT,
+            "reviewer": ExecutorCapability.CODE_REVIEW,
+            "tester": ExecutorCapability.TESTING,
+            "fixer": ExecutorCapability.BUG_FIXING,
+            "documentation": ExecutorCapability.DOCUMENTATION,
+        }
+        
+        caps = [type_to_cap.get(name, ExecutorCapability.GENERIC)]
+        
+        # 如果配置了特殊工具，添加对应能力
+        if "bash" in (cfg.tools or []):
+            caps.append(ExecutorCapability.DEPLOYMENT)
+        if "search" in (cfg.tools or []):
+            caps.append(ExecutorCapability.GENERIC)
+        
+        return caps
     
     def _template_to_plangraph(self) -> PlanGraph:
-        """将 FlowTemplate 转换为 PlanGraph"""
-        from ..plan.graph import PlanNode, PlanGraph
+        """将 FlowTemplate 转换为 PlanGraph
+        
+        字段映射说明:
+        FlowNode (Phase 5 YAML)  →  PlanNode (Phase 4)
+        ──────────────────────────────────────────────
+        id          → id
+        type        → required_capability (需映射为 ExecutorCapability 枚举)
+        label       → description
+        depends_on  → dependencies
+        timeout     → timeout_seconds
+        retry       → max_retries
+        parallel    → parallel_group (布尔值 → 自动生成组名)
+        condition   → condition
+        """
+        from ..plan.graph import PlanNode, PlanGraph, NodeType, ExecutorCapability
+        from datetime import datetime
+        import uuid
+        
+        # FlowNode.type → ExecutorCapability 映射
+        type_to_capability = {
+            "requirements": ExecutorCapability.REQUIREMENTS_ANALYSIS,
+            "designer": ExecutorCapability.TECHNICAL_DESIGN,
+            "developer": ExecutorCapability.CODE_DEVELOPMENT,
+            "reviewer": ExecutorCapability.CODE_REVIEW,
+            "tester": ExecutorCapability.TESTING,
+            "fixer": ExecutorCapability.BUG_FIXING,
+        }
         
         nodes = []
+        parallel_groups: dict[str, list[str]] = {}  # 收集并行节点组
+        
         for node in self.config.flow_template.nodes:
+            # 生成并行组名：同批次并行节点共享一个 group
+            group_name = None
+            if node.parallel:
+                group_name = f"parallel-{uuid.uuid4().hex[:8]}"
+                parallel_groups[node.id] = group_name
+            
             plan_node = PlanNode(
                 id=node.id,
-                type=node.type,
-                label=node.label,
-                dependencies=node.depends_on,
-                timeout=node.timeout,
-                retry=node.retry,
-                parallel=node.parallel,
+                name=node.label,                          # label → name
+                node_type=NodeType.TASK,
+                description=node.label,                   # label → description
+                required_capability=type_to_capability.get(
+                    node.type, ExecutorCapability.GENERIC
+                ),
+                dependencies=node.depends_on,             # depends_on → dependencies
+                parallel_group=group_name,                # parallel → parallel_group
+                condition=node.condition,
+                max_retries=node.retry,                   # retry → max_retries
+                timeout_seconds=node.timeout,             # timeout → timeout_seconds
             )
             nodes.append(plan_node)
         
-        # 边信息用于条件路由
-        edges = {}
+        # 为同批次的并行节点分配相同的 group
+        # 通过拓扑排序找出同一层级的并行节点
+        node_ids = {n.id for n in self.config.flow_template.nodes}
+        for nid, group in parallel_groups.items():
+            for other in nodes:
+                if other.id != nid and other.parallel_group is None:
+                    # 检查是否有相同的依赖集（同层级）
+                    src_node = next((n for n in self.config.flow_template.nodes if n.id == nid), None)
+                    if src_node and set(src_node.depends_on) == set(other.dependencies):
+                        other.parallel_group = group
+        
+        # 构建 PlanGraph（对齐 Phase 4 的 PlanGraph 构造函数签名）
+        # Phase 4 PlanGraph 参数: id, task, nodes(dict), edges(list of tuples)
+        nodes_dict = {n.id: n for n in nodes}
+        edges_list = []
         for edge in self.config.flow_template.edges:
-            key = edge.from_node
-            if key not in edges:
-                edges[key] = []
-            edges[key].append({
-                "to": edge.to_node,
-                "condition": edge.condition,
-            })
+            edges_list.append((edge.from_node, edge.to_node))
         
         return PlanGraph(
-            nodes=nodes,
-            edges=edges,
-            entry_point=self.config.flow_template.entry_point,
+            id=f"plan-{self.config.name}",
+            task=self.config.display_name or self.config.name,
+            nodes=nodes_dict,
+            edges=edges_list,
+            plan_type="configurable",
+            status="draft",
         )
     
     def get_app(self) -> Any:

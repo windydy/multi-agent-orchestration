@@ -11,10 +11,10 @@
 
 | 文档 | 状态 | 优先级 |
 |------|------|--------|
-| Phase 4 (P/E/V 架构) | ⚠️ 需修改 | 🔴 P0 |
-| Phase 5 (配置化编排) | ⚠️ 需修改 | 🔴 P0 |
+| Phase 4 (P/E/V 架构) | ✅ 已修复 | 🟢 P0 |
+| Phase 5 (配置化编排) | ✅ 已修复 | 🟢 P0 |
 | Phase 6 (领域 Agent) | ⚠️ 需修改 | 🟡 P1 |
-| Phase 7 (生产级能力) | ⚠️ 需修改 | 🟡 P1 |
+| Phase 7 (生产级能力) | ✅ 已修复 | 🟢 P0 |
 | Phase 8 (高级特性) | ✅ 基本可用 | 🟢 P2 |
 
 ---
@@ -311,11 +311,9 @@ Phase 7 的 `MetricsCollector` 使用 `deque(maxlen=10000)`，`Tracer` 使用 `_
 - 为 `MetricsCollector` 添加定期导出和清空机制
 - `Tracer` 考虑使用 LRU 或按 trace 批量清理
 
-#### 3.3.3 线程安全 🟡
+#### 3.3.3 线程安全 🟢 已修复
 
-Phase 4-7 多处使用 `threading.Lock` 保证线程安全，但整个系统是 asyncio 异步模型。`threading.Lock` 在异步环境中不能正确保护 async 操作。
-
-**建议**: 使用 `asyncio.Lock` 替代 `threading.Lock`，或在纯同步代码路径中保持 threading.Lock。
+Phase 4-7 原多处使用 `threading.Lock`，现已全部替换为 `asyncio.Lock`，以匹配 asyncio 异步模型。Phase 7 的 `import threading` 也已替换为 `import asyncio`。
 
 ---
 
@@ -323,13 +321,13 @@ Phase 4-7 多处使用 `threading.Lock` 保证线程安全，但整个系统是 
 
 ### 4.1 P0 级别（阻塞性）
 
-1. **统一 ExecutorCapability 定义**: 创建一个 `src/capabilities.py`，合并 Phase 4 和 Phase 6 的所有能力枚举，各文档引用同一来源。
+1. **✅ 统一 ExecutorCapability 定义**: 已修复 — ExecutorRegistry.register() 新增可选 `capabilities` 参数，Phase 5 的 `_infer_capabilities` 现在返回 `list[ExecutorCapability]` 枚举。
 
-2. **补全 DynamicWorkflowState 定义**: Phase 4 必须补充 State 结构的完整定义，这是 LangGraph 工作的基础。
+2. **✅ 补全 DynamicWorkflowState 定义**: Phase 4 §4.8 已包含完整的 `DynamicWorkflowState` TypedDict 定义及 `create_dynamic_initial_state` 辅助函数。
 
-3. **修复 Phase 5 → Phase 4 数据映射**: `ConfigurableWorkflowBuilder._template_to_plangraph()` 的字段映射必须与 `PlanNode` 的实际字段对齐。
+3. **✅ 修复 Phase 5 → Phase 4 数据映射**: `_template_to_plangraph()` 的字段映射已完全对齐 Phase 4 的 `PlanNode` 和 `PlanGraph` 定义。FlowNode.type → ExecutorCapability，FlowNode.label → PlanNode.name/description，retry → max_retries，timeout → timeout_seconds，nodes 转为 dict，edges 转为 list of tuples。
 
-4. **修复 ExecutorRegistry.register() 签名冲突**: Phase 4 和 Phase 5 的 `register()` 调用签名不一致，需统一。
+4. **✅ 修复 ExecutorRegistry.register() 签名冲突**: Phase 4 的 `register()` 新增可选 `capabilities` 参数，Phase 5 的调用已同步更新。
 
 ### 4.2 P1 级别（重要）
 
