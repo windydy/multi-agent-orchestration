@@ -243,3 +243,91 @@ def merge_state(old: WorkflowState, new: dict) -> WorkflowState:
             merged[key] = value
     
     return WorkflowState(**merged)
+
+
+# ============================================================
+# Phase 4: DynamicWorkflowState — 动态工作流状态
+# ============================================================
+
+class DynamicWorkflowState(TypedDict):
+    """
+    动态工作流全局状态。
+
+    扩展原有的 WorkflowState，新增 PlanGraph 和 P/E/V 相关字段。
+    """
+
+    # === 继承自 WorkflowState 的字段 ===
+    task: str
+    project_path: str
+    messages: Annotated[Sequence[dict], operator.add]
+    current_stage: str
+    iteration_count: int
+    total_cost: float
+    start_time: str
+    end_time: str
+
+    # === PlanGraph 相关 ===
+    plan_graph_id: str
+    """当前执行计划的 ID"""
+
+    plan_graph_json: str
+    """PlanGraph 的 JSON 序列化"""
+
+    plan_status: str
+    """计划状态: draft / executing / completed / failed / replanning"""
+
+    # === Executor 结果 ===
+    executor_results: Annotated[dict, lambda a, b: {**a, **b}]
+    """所有节点的执行结果映射: {node_id: result}"""
+
+    current_node: str
+    """当前正在执行的节点 ID"""
+
+    # === Verifier 结果 ===
+    verifier_results: Annotated[dict, lambda a, b: {**a, **b}]
+    """所有节点的验证结果映射: {node_id: result}"""
+
+    verification_passed: bool
+    """最近一次验证是否通过"""
+
+    # === 控制流 ===
+    needs_replan: bool
+    """是否需要重新规划"""
+
+    replan_reason: str
+    """重新规划的原因"""
+
+    completed_nodes: Annotated[list, operator.add]
+    """已完成节点 ID 列表"""
+
+    failed_nodes: Annotated[list, operator.add]
+    """失败节点 ID 列表"""
+
+
+def create_dynamic_initial_state(
+    task: str,
+    plan_graph,  # PlanGraph 实例
+    project_path: str = ".",
+) -> DynamicWorkflowState:
+    """创建动态工作流初始状态"""
+    return DynamicWorkflowState(
+        task=task,
+        project_path=project_path,
+        messages=[],
+        current_stage="planning",
+        iteration_count=0,
+        total_cost=0.0,
+        start_time=datetime.now().isoformat(),
+        end_time="",
+        plan_graph_id=plan_graph.id,
+        plan_graph_json=plan_graph.to_json(),
+        plan_status="executing",
+        executor_results={},
+        current_node="",
+        verifier_results={},
+        verification_passed=True,
+        needs_replan=False,
+        replan_reason="",
+        completed_nodes=[],
+        failed_nodes=[],
+    )
