@@ -6,7 +6,7 @@ src/resilience/retry_policy.py
 
 import time
 import random
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 
 class RetryPolicy:
@@ -28,7 +28,7 @@ class RetryPolicy:
         self.jitter = jitter
         self.retryable_exceptions = retryable_exceptions
     
-    def call(self, func: Callable, *args, **kwargs) -> any:
+    def call(self, func: Callable, *args, **kwargs) -> Any:
         """带重试调用函数"""
         last_exception = None
         
@@ -45,7 +45,7 @@ class RetryPolicy:
         
         raise last_exception
     
-    async def acall(self, func: Callable, *args, **kwargs) -> any:
+    async def acall(self, func: Callable, *args, **kwargs) -> Any:
         """异步版本"""
         import asyncio
         last_exception = None

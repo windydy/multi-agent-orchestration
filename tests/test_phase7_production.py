@@ -45,7 +45,7 @@ class TestMetricsCollector:
         mc = MetricsCollector()
         mc.observe("latency", 0.5)
         mc.observe("latency", 1.2)
-        assert mc._histograms["latency"] == [0.5, 1.2]
+        assert list(mc._histograms["latency"]) == [0.5, 1.2]
 
     def test_record_execution(self):
         mc = MetricsCollector()

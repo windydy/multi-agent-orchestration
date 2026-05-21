@@ -459,6 +459,15 @@ class ClaudeAgentWrapper(BaseAgent):
             elif tool_name == "bash":
                 command = tool_input.get("command")
                 timeout = tool_input.get("timeout", 60)
+                # 安全校验：阻止明显危险的命令
+                dangerous_patterns = [
+                    "rm -rf /", "rm -rf /*", "> /dev/sda", "mkfs",
+                    ":(){ :|:& };:", "chmod 777 /", "chmod -R 777 /",
+                ]
+                cmd_lower = command.lower()
+                for pattern in dangerous_patterns:
+                    if pattern in cmd_lower:
+                        return ToolCallResult(tool_name, tool_input, "安全拦截: 拒绝执行危险命令", False)
                 result = await asyncio.create_subprocess_shell(
                     command,
                     stdout=asyncio.subprocess.PIPE,

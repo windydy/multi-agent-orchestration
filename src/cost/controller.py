@@ -41,9 +41,10 @@ class CostRecord:
 class CostController:
     """成本控制器"""
     
-    def __init__(self, budget: CostBudget = None):
+    def __init__(self, budget: CostBudget = None, max_records: int = 10000):
         self.budget = budget or CostBudget()
         self._records: list[CostRecord] = []
+        self._max_records = max_records
         self._running_total: float = 0.0
         self._agent_totals: dict[str, float] = {}
         self._task_totals: dict[str, float] = {}
@@ -63,6 +64,9 @@ class CostController:
                 output_tokens=output_tokens,
             )
             self._records.append(record)
+            # 防止内存泄露：限制记录数量
+            if len(self._records) > self._max_records:
+                self._records = self._records[-self._max_records:]
             self._running_total += cost
             self._agent_totals[agent] = self._agent_totals.get(agent, 0) + cost
             self._task_totals[task_id] = self._task_totals.get(task_id, 0) + cost

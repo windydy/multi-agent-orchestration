@@ -15,11 +15,10 @@ from src.workflows.runner import WorkflowRunner, run_pipeline, print_state_summa
 from src.workflows.states import create_initial_state, WorkflowStateManager
 
 
-@pytest.mark.asyncio
 class TestWorkflowRunner:
     """测试WorkflowRunner"""
     
-    @patch("src.workflows.runner.LANGGRAPH_AVAILABLE", True)
+    @pytest.mark.asyncio
     @patch("src.workflows.builder.LANGGRAPH_AVAILABLE", True)
     async def test_runner_init(self):
         """测试Runner初始化"""
@@ -27,7 +26,7 @@ class TestWorkflowRunner:
         
         assert runner.pipeline is not None
     
-    @patch("src.workflows.runner.LANGGRAPH_AVAILABLE", True)
+    @pytest.mark.asyncio
     @patch("src.workflows.builder.LANGGRAPH_AVAILABLE", True)
     async def test_run_without_interrupt(self):
         """测试无中断运行"""
@@ -47,7 +46,7 @@ class TestWorkflowRunner:
         assert result["success"] is True
         assert "thread_id" in result
     
-    @patch("src.workflows.runner.LANGGRAPH_AVAILABLE", True)
+    @pytest.mark.asyncio
     @patch("src.workflows.builder.LANGGRAPH_AVAILABLE", True)
     async def test_run_until_interrupt(self):
         """测试运行直到中断"""
@@ -69,7 +68,7 @@ class TestWorkflowRunner:
         assert "thread_id" in result
         assert "next_steps" in result
     
-    @patch("src.workflows.runner.LANGGRAPH_AVAILABLE", True)
+    @pytest.mark.asyncio
     @patch("src.workflows.builder.LANGGRAPH_AVAILABLE", True)
     async def test_resume(self):
         """测试恢复执行"""
@@ -92,7 +91,6 @@ class TestWorkflowRunner:
         assert result["success"] is True
         assert result["approval_result"]["approved"] is True
     
-    @patch("src.workflows.runner.LANGGRAPH_AVAILABLE", True)
     @patch("src.workflows.builder.LANGGRAPH_AVAILABLE", True)
     def test_get_state(self):
         """测试获取状态"""
@@ -111,7 +109,6 @@ class TestWorkflowRunner:
         assert state["values"]["task"] == "test"
         assert state["next"] == ["review"]
     
-    @patch("src.workflows.runner.LANGGRAPH_AVAILABLE", True)
     @patch("src.workflows.builder.LANGGRAPH_AVAILABLE", True)
     def test_list_executions(self):
         """测试列出执行"""
@@ -127,11 +124,10 @@ class TestWorkflowRunner:
         assert len(executions) == 2
 
 
-@pytest.mark.asyncio
 class TestRunPipeline:
     """测试便捷函数"""
     
-    @patch("src.workflows.runner.LANGGRAPH_AVAILABLE", True)
+    @pytest.mark.asyncio
     @patch("src.workflows.builder.LANGGRAPH_AVAILABLE", True)
     async def test_run_pipeline_no_review(self):
         """测试无人工审批运行"""

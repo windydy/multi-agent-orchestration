@@ -22,11 +22,12 @@ class MetricPoint:
 class MetricsCollector:
     """指标收集器（异步安全）"""
     
-    def __init__(self, max_points: int = 10000):
+    def __init__(self, max_points: int = 10000, max_histogram: int = 10000):
         self._points: deque = deque(maxlen=max_points)
         self._counters: dict[str, float] = {}
         self._gauges: dict[str, float] = {}
-        self._histograms: dict[str, list[float]] = {}
+        self._histograms: dict[str, deque] = {}
+        self._max_histogram = max_histogram
         self._lock = asyncio.Lock()
     
     # --- Counter (累加计数器) ---
@@ -43,9 +44,31 @@ class MetricsCollector:
     # --- Histogram (分布) ---
     def observe(self, name: str, value: float, labels: dict = None):
         if name not in self._histograms:
-            self._histograms[name] = []
+            self._histograms[name] = deque(maxlen=self._max_histogram)
         self._histograms[name].append(value)
         self._record_point(MetricPoint(name, value, time.time(), labels or {}))
+    
+    # --- Async lock-protected operations ---
+    async def aincrement(self, name: str, value: float = 1.0, labels: dict = None):
+        """异步安全的 increment"""
+        async with self._lock:
+            self._counters[name] = self._counters.get(name, 0) + value
+            self._record_point(MetricPoint(name, value, time.time(), labels or {}))
+    
+    async def aset_gauge(self, name: str, value: float, labels: dict = None):
+        """异步安全的 set_gauge"""
+        async with self._lock:
+            key = self._make_key(name, labels)
+            self._gauges[key] = value
+            self._record_point(MetricPoint(name, value, time.time(), labels or {}))
+    
+    async def aobserve(self, name: str, value: float, labels: dict = None):
+        """异步安全的 observe"""
+        async with self._lock:
+            if name not in self._histograms:
+                self._histograms[name] = deque(maxlen=self._max_histogram)
+            self._histograms[name].append(value)
+            self._record_point(MetricPoint(name, value, time.time(), labels or {}))
     
     # --- 快捷方法 ---
     def record_execution(self, agent: str, duration: float, success: bool, cost: float):
