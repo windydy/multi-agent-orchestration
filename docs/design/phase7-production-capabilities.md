@@ -65,7 +65,7 @@ class MetricPoint:
 
 
 class MetricsCollector:
-    """指标收集器（线程安全）"""
+    """指标收集器（异步安全）"""
     
     def __init__(self, max_points: int = 10000):
         self._points: deque = deque(maxlen=max_points)
@@ -75,21 +75,21 @@ class MetricsCollector:
         self._lock = asyncio.Lock()
     
     # --- Counter (累加计数器) ---
-    def increment(self, name: str, value: float = 1.0, labels: dict = None):
-        with self._lock:
+    async def increment(self, name: str, value: float = 1.0, labels: dict = None):
+        async with self._lock:
             self._counters[name] = self._counters.get(name, 0) + value
             self._record_point(MetricPoint(name, value, time.time(), labels or {}))
     
     # --- Gauge (瞬时值) ---
-    def set_gauge(self, name: str, value: float, labels: dict = None):
-        with self._lock:
+    async def set_gauge(self, name: str, value: float, labels: dict = None):
+        async with self._lock:
             key = self._make_key(name, labels)
             self._gauges[key] = value
             self._record_point(MetricPoint(name, value, time.time(), labels or {}))
     
     # --- Histogram (分布) ---
-    def observe(self, name: str, value: float, labels: dict = None):
-        with self._lock:
+    async def observe(self, name: str, value: float, labels: dict = None):
+        async with self._lock:
             if name not in self._histograms:
                 self._histograms[name] = []
             self._histograms[name].append(value)
@@ -156,9 +156,9 @@ class MetricsCollector:
         label_str = ",".join(f'{k}="{v}"' for k, v in sorted(labels.items()))
         return f"{name}{{{label_str}}}"
     
-    def reset(self):
+    async def reset(self):
         """重置所有指标"""
-        with self._lock:
+        async with self._lock:
             self._points.clear()
             self._counters.clear()
             self._gauges.clear()
@@ -241,7 +241,7 @@ class Tracer:
         self._max_spans = max_spans
         self._exporter = None
     
-    def start_span(self, name: str, parent: Optional["Span"] = None, 
+    async def start_span(self, name: str, parent: Optional["Span"] = None, 
                    attributes: dict = None) -> Span:
         span = Span(
             trace_id=parent.trace_id if parent else uuid.uuid4().hex,
@@ -252,7 +252,7 @@ class Tracer:
             attributes=attributes or {},
         )
         
-        with self._lock:
+        async with self._lock:
             self._spans[span.span_id] = span
             if len(self._spans) > self._max_spans:
                 self._evict_oldest()
@@ -264,8 +264,8 @@ class Tracer:
         if self._exporter:
             self._exporter.export(span.to_dict())
     
-    def get_trace(self, trace_id: str) -> list[Span]:
-        with self._lock:
+    async def get_trace(self, trace_id: str) -> list[Span]:
+        async with self._lock:
             return [s for s in self._spans.values() if s.trace_id == trace_id]
     
     def _evict_oldest(self):
@@ -331,10 +331,10 @@ class CostController:
         self._status = CostStatus.OK
         self._callbacks: list = []
     
-    def record_cost(self, agent: str, task_id: str, cost: float, 
+    async def record_cost(self, agent: str, task_id: str, cost: float, 
                     input_tokens: int, output_tokens: int):
         """记录成本"""
-        with self._lock:
+        async with self._lock:
             record = CostRecord(
                 timestamp=time.time(),
                 agent=agent,
@@ -522,11 +522,11 @@ class CircuitBreaker:
             raise
     
     def _get_state(self) -> CircuitState:
-        with self._lock:
-            if self._state == CircuitState.OPEN:
-                if time.time() - self._last_failure_time >= self.recovery_timeout:
-                    self._state = CircuitState.HALF_OPEN
-            return self._state
+        """获取熔断器状态（纯同步，无需锁）"""
+        if self._state == CircuitState.OPEN:
+            if time.time() - self._last_failure_time >= self.recovery_timeout:
+                self._state = CircuitState.HALF_OPEN
+        return self._state
     
     def _on_success(self):
         with self._lock:
@@ -552,6 +552,11 @@ class CircuitBreaker:
             self._failure_count = 0
             self._last_failure_time = 0.0
 ```
+
+> **注意**: CircuitBreaker 的 `_get_state()` 改为无锁（纯读取+状态机转换），
+> 因为 CircuitBreaker 的状态转换频率远低于 MetricsCollector，且 `with self._lock`
+> 在同步方法中保持 threading.Lock 是合理的（CircuitBreaker 不进入 async 路径）。
+> MetricsCollector/Tracer/CostController 等高频组件已改为 asyncio.Lock + async def。
 
 ### 4.3 src/resilience/retry_policy.py
 

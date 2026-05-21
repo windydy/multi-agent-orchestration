@@ -247,6 +247,7 @@ class NodeType(Enum):
 
 class ExecutorCapability(Enum):
     """Executor 能力声明"""
+    # Phase 4 基础能力
     REQUIREMENTS_ANALYSIS = "requirements_analysis"
     TECHNICAL_DESIGN = "technical_design"
     CODE_DEVELOPMENT = "code_development"
@@ -257,6 +258,13 @@ class ExecutorCapability(Enum):
     SECURITY_AUDIT = "security_audit"
     DEPLOYMENT = "deployment"
     GENERIC = "generic"       # 通用能力（兜底）
+    # Phase 6 扩展能力
+    DEVOPS_CI_CD = "devops_ci_cd"
+    DEVOPS_CONTAINER = "devops_container"
+    DEVOPS_INFRA = "devops_infra"
+    DATA_ENGINEERING = "data_engineering"
+    ARCHITECTURE_DESIGN = "architecture_design"
+    PRODUCT_MANAGEMENT = "product_management"
 
 
 @dataclass
@@ -2624,7 +2632,86 @@ PlanGraph 中的并行组示例:
 
 ---
 
-## 6. 与现有代码的集成
+## 八、Verifier 规则体系统一说明
+
+Verifier 规则定义在 Phase 4/5/7 中分别处于不同抽象层次，以下是三层规则的关系和转换路径：
+
+### 8.1 三层规则架构
+
+| 层次 | 来源 | 规则格式 | 作用域 |
+|------|------|---------|--------|
+| **L1: YAML 配置层** | Phase 5/6 配置文件 | `{name, check, severity, timeout}` | 工作流级别，声明式 |
+| **L2: 代码级规则** | Phase 4 VerificationRule | `{rule_id, dimension, status, score, message}` | 单次执行级别，结构化 |
+| **L3: 维度阈值层** | Phase 7 生产监控 | `{dimension, threshold}` | 全局聚合级别，评分门槛 |
+
+### 8.2 转换流程
+
+```
+YAML 规则 (Phase 5 config)
+    │
+    ▼ ConfigurableWorkflowBuilder 加载
+    │
+    ▼ 为每条 YAML 规则创建对应的 VerificationRule
+    │
+VerificationRule (Phase 4)
+    │
+    ▼ VerifierFramework 执行 check 命令
+    │
+    ▼ 产生 VerificationItem 结果
+    │
+VerificationResult (聚合后的 score)
+    │
+    ▼ Phase 7 CostController/MetricsCollector 聚合
+    │
+维度阈值检查 (Phase 7)
+    │
+    ▼ score >= threshold ? pass : fail
+    │
+最终判定
+```
+
+### 8.3 实现映射
+
+```python
+def yaml_rule_to_verification_rule(yaml_rule: VerificationRule) -> dict:
+    """将 Phase 5 YAML 规则转换为 VerifierFramework 可执行的规则"""
+    return {
+        "rule_id": f"yaml-{yaml_rule.name}",
+        "dimension": _map_severity_to_dimension(yaml_rule.severity),
+        "check_command": yaml_rule.check,
+        "severity": yaml_rule.severity.value,
+        "timeout": yaml_rule.timeout,
+    }
+
+def _map_severity_to_dimension(severity: SeverityLevel) -> str:
+    """SeverityLevel → VerificationDimension 映射"""
+    mapping = {
+        SeverityLevel.INFO: "quality",
+        SeverityLevel.WARNING: "quality",
+        SeverityLevel.ERROR: "correctness",
+        SeverityLevel.CRITICAL: "security",
+    }
+    return mapping.get(severity, "quality")
+```
+
+### 8.4 Phase 7 可观测性与现有 Hooks 的关系
+
+Phase 1-3 已有 hooks 机制，Phase 7 新增的可观测性组件与 hooks 的关系：
+
+| Phase 1-3 组件 | Phase 7 组件 | 关系 |
+|---------------|-------------|------|
+| `hooks(logging=True)` | `StructuredLogger` | **替代** — StructuredLogger 提供更完整的日志体系 |
+| `hooks(cost_control=True)` | `CostController` | **增强** — CostController 复用 hooks 的预算检查，新增实时追踪 |
+| `hooks(safety=True)` | `CircuitBreaker` | **互补** — hooks 控制文件/网络权限，CircuitBreaker 控制 API 弹性 |
+| 无 | `MetricsCollector` | **新增** — 无对应组件 |
+| 无 | `Tracer` | **新增** — 无对应组件 |
+
+**集成策略**：Phase 7 的可观测性组件通过 Phase 4 的 `HookManager` 接入工作流，
+hooks 触发时同步写入 MetricsCollector 和 Tracer，不改变现有 hooks 的调用方式。
+
+---
+
+## 九、与现有代码的集成
 
 ### 6.1 现有 Agent → Executor 适配
 

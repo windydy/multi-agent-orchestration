@@ -1571,348 +1571,386 @@ def register_domain_agents(registry, api_key=None):
 
 ### 10.1 DevOps CI/CD 流水线配置
 
+> **注意**: 以下配置严格遵循 Phase 5 定义的 YAML Schema（version/name/executors/flow_template/verifiers），
+> 与原 Phase 6 草稿格式不同。新增 `devops` 和 `security` 作为 executor 类型。
+
 ```yaml
-# configs/workflows/devops-ci.yaml
-schema_version: "1.0"
+# config/workflows/devops-ci.yaml
+version: "1.0"
+name: devops-ci-pipeline
+display_name: "DevOps CI/CD 流水线"
+description: "CI 配置生成 → Docker 构建 → 安全扫描 → 部署"
 
-meta:
-  name: "devops-ci-pipeline"
-  version: "1.0.0"
-  description: "DevOps CI/CD 配置和部署流水线"
+executors:
+  defaults:
+    model: qwen3.6-plus
+    max_iterations: 15
+    timeout: 600
+    retry: 2
+  devops:
+    model: qwen3.6-plus
+    max_iterations: 20
+    timeout: 900
+    tools: [read_file, write_file, bash]
+  security:
+    model: qwen3.6-plus
+    max_iterations: 10
+    timeout: 600
+    tools: [read_file, bash]
 
-defaults:
-  model: "qwen3.6-plus"
-  max_iterations: 15
-  enable_human_review: true
-  timeout_seconds: 600
+flow_template:
+  entry_point: ci_config
+  nodes:
+    - id: ci_config
+      type: devops
+      label: "CI/CD 配置生成"
+      timeout: 600
+      retry: 2
 
-nodes:
-  - id: "ci_config"
-    name: "CI/CD 配置生成"
-    type: "executor"
-    executor: "devops_agent"
-    outputs: ["ci_config_file"]
-    dependencies: []
-    prompt_template: |
-      为以下项目生成 CI/CD 配置：
-      项目路径: {project_path}
-      语言: {language}
-      要求: {requirements}
+    - id: docker_build
+      type: devops
+      label: "Docker 镜像构建"
+      timeout: 900
+      depends_on: [ci_config]
 
-  - id: "docker_build"
-    name: "Docker 镜像构建"
-    type: "executor"
-    executor: "devops_agent"
-    inputs:
-      - source: "ci_config"
-        target: "ci_config_file"
-    outputs: ["docker_image_info"]
-    dependencies: ["ci_config"]
+    - id: security_check
+      type: security
+      label: "镜像安全扫描"
+      timeout: 600
+      depends_on: [docker_build]
 
-  - id: "security_check"
-    name: "镜像安全扫描"
-    type: "executor"
-    executor: "security_agent"
-    inputs:
-      - source: "docker_build"
-        target: "docker_image_info"
-    outputs: ["security_report"]
-    dependencies: ["docker_build"]
+    - id: deploy
+      type: devops
+      label: "部署到测试环境"
+      timeout: 900
+      depends_on: [security_check]
 
-  - id: "deploy"
-    name: "部署到测试环境"
-    type: "executor"
-    executor: "devops_agent"
-    inputs:
-      - source: "docker_build"
-        target: "docker_image_info"
-      - source: "security_check"
-        target: "security_report"
-    outputs: ["deployment_status"]
-    dependencies: ["security_check"]
+  edges:
+    - from: ci_config
+      to: docker_build
+    - from: docker_build
+      to: security_check
+    - from: security_check
+      to: deploy
+      condition: "passed"
+    - from: security_check
+      to: __end__
+      condition: "failed"
 
-conditions:
-  security_gate:
-    type: "conditional"
-    source: "security_check"
-    branches:
-      - condition: "security_report.blocked == false"
-        target: "deploy"
-        label: "安全检查通过"
-      - default: true
-        target: "__end__"
-        label: "安全扫描失败"
+verifiers:
+  security_scan:
+    enabled: true
+    rules:
+      - name: image_audit
+        check: "trivy image --severity HIGH,CRITICAL"
+        severity: critical
+        timeout: 120
+      - name: config_check
+        check: "docker scout cves"
+        severity: warning
+        timeout: 60
 
-verifier:
-  enabled: true
-  rules:
-    - dimension: "security"
-      threshold: 0.8
-    - dimension: "deployment_health"
-      threshold: 0.7
-  on_failure: "fail"
+cost_control:
+  warning: 5.0
+  limit: 10.0
+  stop: 20.0
 ```
 
 ### 10.2 安全审查流水线配置
 
 ```yaml
-# configs/workflows/security-audit.yaml
-schema_version: "1.0"
+# config/workflows/security-audit.yaml
+version: "1.0"
+name: security-audit-pipeline
+display_name: "安全审查流水线"
+description: "SAST 扫描 → 依赖审计 → 配置审查 → 报告汇总"
 
-meta:
-  name: "security-audit-pipeline"
-  version: "1.0.0"
-  description: "全面安全审查流水线"
+executors:
+  defaults:
+    model: qwen3.6-plus
+    max_iterations: 10
+    timeout: 600
+    retry: 2
+  security:
+    model: qwen3.6-plus
+    max_iterations: 15
+    timeout: 900
+    tools: [read_file, search, bash]
 
-defaults:
-  model: "qwen3.6-plus"
-  max_iterations: 10
-  enable_human_review: true
-  timeout_seconds: 600
+flow_template:
+  entry_point: sast_scan
+  nodes:
+    - id: sast_scan
+      type: security
+      label: "SAST 代码安全扫描"
+      timeout: 600
+      parallel: true
 
-nodes:
-  - id: "sast_scan"
-    name: "SAST 代码安全扫描"
-    type: "executor"
-    executor: "security_agent"
-    outputs: ["sast_report"]
-    dependencies: []
+    - id: dependency_audit
+      type: security
+      label: "依赖安全审计"
+      timeout: 600
+      parallel: true
 
-  - id: "dependency_audit"
-    name: "依赖安全审计"
-    type: "executor"
-    executor: "security_agent"
-    outputs: ["dependency_report"]
-    dependencies: []
+    - id: config_audit
+      type: security
+      label: "配置安全审计"
+      timeout: 600
+      parallel: true
 
-  - id: "config_audit"
-    name: "配置安全审计"
-    type: "executor"
-    executor: "security_agent"
-    outputs: ["config_report"]
-    dependencies: []
+    - id: consolidate
+      type: security
+      label: "安全报告汇总"
+      timeout: 900
+      depends_on: [sast_scan, dependency_audit, config_audit]
 
-  - id: "consolidate"
-    name: "安全报告汇总"
-    type: "executor"
-    executor: "security_agent"
-    inputs:
-      - source: "sast_scan"
-        target: "sast_report"
-      - source: "dependency_audit"
-        target: "dependency_report"
-      - source: "config_audit"
-        target: "config_report"
-    outputs: ["final_security_report"]
-    dependencies: ["sast_scan", "dependency_audit", "config_audit"]
+  edges:
+    - from: sast_scan
+      to: consolidate
+    - from: dependency_audit
+      to: consolidate
+    - from: config_audit
+      to: consolidate
 
-verifier:
-  enabled: true
-  rules:
-    - dimension: "security"
-      threshold: 0.9
-  on_failure: "fail"
+verifiers:
+  security_check:
+    enabled: true
+    rules:
+      - name: sast_scan
+        check: "semgrep --config auto --error"
+        severity: critical
+        timeout: 120
+      - name: dependency_audit
+        check: "pip-audit --fail-on HIGH"
+        severity: critical
+        timeout: 120
+      - name: config_audit
+        check: "checkov -d ."
+        severity: warning
+        timeout: 90
 ```
 
 ### 10.3 数据分析流水线配置
 
 ```yaml
-# configs/workflows/data-analysis.yaml
-schema_version: "1.0"
+# config/workflows/data-analysis.yaml
+version: "1.0"
+name: data-analysis-pipeline
+display_name: "数据分析流水线"
+description: "数据清洗 → 分析 → 可视化"
 
-meta:
-  name: "data-analysis-pipeline"
-  version: "1.0.0"
-  description: "数据分析流水线：清洗 → 分析 → 可视化"
+executors:
+  defaults:
+    model: qwen3.6-plus
+    max_iterations: 20
+    timeout: 900
+    retry: 2
+  data:
+    model: qwen3.6-plus
+    max_iterations: 30
+    timeout: 1800
+    tools: [read_file, write_file, bash]
 
-defaults:
-  model: "qwen3.6-plus"
-  max_iterations: 20
-  enable_human_review: false
-  timeout_seconds: 900
+flow_template:
+  entry_point: data_cleaning
+  nodes:
+    - id: data_cleaning
+      type: data
+      label: "数据清洗"
+      timeout: 600
 
-nodes:
-  - id: "data_cleaning"
-    name: "数据清洗"
-    type: "executor"
-    executor: "data_agent"
-    outputs: ["cleaned_data"]
-    dependencies: []
-    timeout_seconds: 600
+    - id: data_analysis
+      type: data
+      label: "数据分析"
+      timeout: 900
+      depends_on: [data_cleaning]
 
-  - id: "data_analysis"
-    name: "数据分析"
-    type: "executor"
-    executor: "data_agent"
-    inputs:
-      - source: "data_cleaning"
-        target: "cleaned_data"
-    outputs: ["analysis_results"]
-    dependencies: ["data_cleaning"]
+    - id: visualization
+      type: data
+      label: "数据可视化"
+      timeout: 600
+      depends_on: [data_analysis]
 
-  - id: "visualization"
-    name: "数据可视化"
-    type: "executor"
-    executor: "data_agent"
-    inputs:
-      - source: "data_analysis"
-        target: "analysis_results"
-    outputs: ["visualizations"]
-    dependencies: ["data_analysis"]
+  edges:
+    - from: data_cleaning
+      to: data_analysis
+    - from: data_analysis
+      to: visualization
 ```
 
 ### 10.4 全生命周期流水线（所有 Agent 协作）
 
+> 以下示例展示如何将 Phase 5 的 Schema 与 Phase 6 的领域 Agent 结合，
+> 构建覆盖完整研发生命周期的配置化流水线。
+
 ```yaml
-# configs/workflows/full-lifecycle.yaml
-schema_version: "1.0"
+# config/workflows/full-lifecycle.yaml
+version: "1.0"
+name: full-lifecycle-pipeline
+display_name: "全生命周期流水线"
+description: "产品 → 需求 → 架构 → 设计 → 开发 → 安全 → 测试 → DevOps"
 
-meta:
-  name: "full-lifecycle-pipeline"
-  version: "1.0.0"
-  description: "完整研发生命周期：产品 → 需求 → 架构 → 设计 → 开发 → 安全 → 测试 → DevOps"
+executors:
+  defaults:
+    model: qwen3.6-plus
+    max_iterations: 20
+    timeout: 600
+    retry: 2
+  product:
+    model: qwen3.6-turbo
+    max_iterations: 10
+    timeout: 300
+    tools: [read_file, write_file]
+  architect:
+    model: qwen3.6-plus
+    max_iterations: 15
+    timeout: 900
+    tools: [read_file, write_file, search]
+  developer:
+    model: qwen3.6-plus
+    max_iterations: 30
+    timeout: 1800
+    tools: [read_file, write_file, edit_file, bash, search]
+  reviewer:
+    model: qwen3.6-plus
+    max_iterations: 10
+    timeout: 600
+    tools: [read_file, search]
+  tester:
+    model: qwen3.6-plus
+    max_iterations: 15
+    timeout: 900
+    tools: [read_file, write_file, bash]
+  security:
+    model: qwen3.6-plus
+    max_iterations: 10
+    timeout: 600
+    tools: [read_file, bash]
+  devops:
+    model: qwen3.6-plus
+    max_iterations: 15
+    timeout: 900
+    tools: [read_file, write_file, bash]
 
-defaults:
-  model: "qwen3.6-plus"
-  max_iterations: 20
-  enable_human_review: true
-  timeout_seconds: 600
+flow_template:
+  entry_point: product_planning
+  nodes:
+    - id: product_planning
+      type: product
+      label: "产品规划"
+      timeout: 300
 
-nodes:
-  # 产品阶段
-  - id: "product_planning"
-    name: "产品规划"
-    type: "executor"
-    executor: "product_manager_agent"
-    model: "qwen3.6-turbo"
-    outputs: ["product_requirements", "user_stories", "roadmap"]
-    dependencies: []
+    - id: requirements
+      type: requirements
+      label: "需求分析"
+      timeout: 600
+      depends_on: [product_planning]
 
-  # 需求分析
-  - id: "requirements"
-    name: "需求分析"
-    type: "executor"
-    executor: "requirements_agent"
-    inputs:
-      - source: "product_planning"
-        target: "product_requirements"
-    outputs: ["requirements_doc"]
-    dependencies: ["product_planning"]
+    - id: architecture
+      type: architect
+      label: "架构设计"
+      timeout: 900
+      depends_on: [requirements]
 
-  # 架构设计
-  - id: "architecture"
-    name: "架构设计"
-    type: "executor"
-    executor: "architect_agent"
-    inputs:
-      - source: "requirements"
-        target: "requirements_doc"
-    outputs: ["architecture_doc"]
-    dependencies: ["requirements"]
+    - id: design
+      type: designer
+      label: "技术设计"
+      timeout: 600
+      depends_on: [requirements, architecture]
 
-  # 技术设计
-  - id: "design"
-    name: "技术设计"
-    type: "executor"
-    executor: "designer_agent"
-    inputs:
-      - source: "requirements"
-        target: "requirements_doc"
-      - source: "architecture"
-        target: "architecture_doc"
-    outputs: ["design_doc"]
-    dependencies: ["requirements", "architecture"]
+    - id: develop
+      type: developer
+      label: "开发实现"
+      timeout: 1800
+      depends_on: [design]
 
-  # 开发实现
-  - id: "develop"
-    name: "开发实现"
-    type: "executor"
-    executor: "developer_agent"
-    inputs:
-      - source: "design"
-        target: "design_doc"
-    outputs: ["source_code"]
-    dependencies: ["design"]
+    - id: review
+      type: reviewer
+      label: "代码审查"
+      timeout: 600
+      depends_on: [develop]
 
-  # 代码审查
-  - id: "review"
-    name: "代码审查"
-    type: "executor"
-    executor: "reviewer_agent"
-    inputs:
-      - source: "develop"
-        target: "source_code"
-    outputs: ["review_report"]
-    dependencies: ["develop"]
+    - id: security
+      type: security
+      label: "安全审查"
+      timeout: 600
+      depends_on: [develop]
+      parallel: true
 
-  # 安全扫描
-  - id: "security"
-    name: "安全审查"
-    type: "executor"
-    executor: "security_agent"
-    inputs:
-      - source: "develop"
-        target: "source_code"
-    outputs: ["security_report"]
-    dependencies: ["develop"]
+    - id: test
+      type: tester
+      label: "测试验证"
+      timeout: 900
+      depends_on: [review]
 
-  # 测试验证
-  - id: "test"
-    name: "测试验证"
-    type: "executor"
-    executor: "tester_agent"
-    inputs:
-      - source: "develop"
-        target: "source_code"
-      - source: "review"
-        target: "review_report"
-    outputs: ["test_report"]
-    dependencies: ["review"]
+    - id: ci_cd
+      type: devops
+      label: "CI/CD 配置"
+      timeout: 600
+      depends_on: [develop]
+      parallel: true
 
-  # DevOps 部署
-  - id: "ci_cd"
-    name: "CI/CD 配置"
-    type: "executor"
-    executor: "devops_agent"
-    inputs:
-      - source: "develop"
-        target: "source_code"
-    outputs: ["ci_config"]
-    dependencies: ["develop"]
+    - id: deploy
+      type: devops
+      label: "部署上线"
+      timeout: 900
+      depends_on: [test, security, ci_cd]
 
-conditions:
-  review_router:
-    type: "conditional"
-    source: "review"
-    branches:
-      - condition: "review_result.approved == true"
-        target: "test"
-        label: "审查通过"
-      - default: true
-        target: "develop"
-        label: "需要修改"
+  edges:
+    - from: product_planning
+      to: requirements
+    - from: requirements
+      to: architecture
+    - from: requirements
+      to: design
+    - from: architecture
+      to: design
+    - from: design
+      to: develop
+    - from: develop
+      to: review
+    - from: develop
+      to: security
+    - from: develop
+      to: ci_cd
+    - from: review
+      to: test
+    - from: test
+      to: deploy
+    - from: security
+      to: deploy
+      condition: "passed"
+    - from: ci_cd
+      to: deploy
 
-  security_gate:
-    type: "conditional"
-    source: "security"
-    branches:
-      - condition: "security_report.blocked == false"
-        target: "ci_cd"
-        label: "安全检查通过"
-      - default: true
-        target: "develop"
-        label: "安全漏洞需修复"
+verifiers:
+  code_quality:
+    enabled: true
+    rules:
+      - name: lint
+        check: "ruff check . --select E,F,W"
+        severity: error
+        timeout: 60
+      - name: test_coverage
+        check: "pytest --cov --cov-fail-under=80"
+        severity: warning
+        timeout: 120
+  security_check:
+    enabled: true
+    rules:
+      - name: dependency_audit
+        check: "pip-audit --fail-on HIGH"
+        severity: critical
+        timeout: 120
+      - name: sast_scan
+        check: "semgrep --config auto --error"
+        severity: critical
+        timeout: 120
 
-  test_router:
-    type: "conditional"
-    source: "test"
-    branches:
-      - condition: "test_result.passed == true"
-        target: "ci_cd"
-        label: "测试通过"
-      - default: true
-        target: "develop"
-        label: "测试失败"
+cost_control:
+  warning: 5.0
+  limit: 10.0
+  stop: 20.0
 ```
 
 ---

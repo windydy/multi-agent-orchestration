@@ -189,9 +189,9 @@ human_review:
 
 # 成本配置
 cost_control:
-  warning: 5.0    # $5 警告
-  limit: 10.0     # $10 限制
-  stop: 20.0      # $20 强制停止
+  warning_threshold: 5.0    # $5 警告
+  limit_threshold: 10.0     # $10 限制
+  stop_threshold: 20.0      # $20 强制停止
 
 # 检查点配置
 checkpoint:
@@ -227,7 +227,7 @@ vars:
 | `verifiers` | object | 否 | {} | Verifier 配置 |
 | `flow_template` | object | **是** | - | 流程模板 |
 | `human_review` | object | 否 | {enabled:false} | 人工审批 |
-| `cost_control` | object | 否 | {warning:5, limit:10, stop:20} | 成本控制 |
+| `cost_control` | object | 否 | {warning_threshold:5, limit_threshold:10, stop_threshold:20} | 成本控制 |
 | `checkpoint` | object | 否 | {enabled:true} | 检查点 |
 | `logging` | object | 否 | {level:"INFO"} | 日志配置 |
 | `vars` | object | 否 | {} | 自定义变量 |
@@ -362,9 +362,9 @@ class HumanReviewConfig(BaseModel):
 
 class CostControlConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    warning: float = 5.0
-    limit: float = 10.0
-    stop: float = 20.0
+    warning_threshold: float = 5.0    # 统一命名为 warning_threshold
+    limit_threshold: float = 10.0     # 统一命名为 limit_threshold
+    stop_threshold: float = 20.0      # 统一命名为 stop_threshold
 
 
 class CheckpointConfig(BaseModel):
@@ -929,7 +929,190 @@ app = builder.build()
 
 ---
 
-## 七、CLI 接口设计
+## 六、WorkflowRunner 接口设计
+
+### 6.1 src/workflows/runner.py
+
+```python
+import asyncio
+from typing import Any, Optional
+from ..config.schema import WorkflowConfig
+
+class WorkflowRunner:
+    """工作流运行器
+    
+    统一的工作流执行入口，支持同步和异步调用。
+    负责：
+    - 初始化状态
+    - 编译/执行 LangGraph 应用
+    - 超时控制
+    - 异常传播
+    - 结果聚合
+    """
+    
+    def __init__(self, app: Any, config: WorkflowConfig):
+        self.app = app          # 编译后的 LangGraph StateGraph
+        self.config = config
+        self._timeout = config.executors.get("defaults", None)
+        if self._timeout:
+            self._timeout = self._timeout.timeout if hasattr(self._timeout, 'timeout') else 300
+        else:
+            self._timeout = 300
+    
+    async def run(
+        self,
+        task: str,
+        project_path: str = ".",
+        auto_approve: bool = False,
+    ) -> dict:
+        """异步运行工作流
+        
+        Args:
+            task: 任务描述（自然语言）
+            project_path: 项目路径
+            auto_approve: 是否自动审批所有人工节点
+        
+        Returns:
+            最终状态字典，包含 executor_results, verifier_results 等
+        """
+        from src.workflows.states import create_dynamic_initial_state
+        from src.plan.graph import PlanGraph
+        
+        # 初始化状态
+        initial_state = create_dynamic_initial_state(
+            task=task,
+            plan_graph=PlanGraph(id="adhoc", task=task),
+            project_path=project_path,
+        )
+        initial_state["auto_approve"] = auto_approve
+        
+        # 带超时执行
+        try:
+            result = await asyncio.wait_for(
+                self.app.ainvoke(initial_state),
+                timeout=self._timeout,
+            )
+            return result
+        except asyncio.TimeoutError:
+            return {
+                "status": "timeout",
+                "error": f"工作流执行超时 ({self._timeout}s)",
+                "executor_results": initial_state.get("executor_results", {}),
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "executor_results": initial_state.get("executor_results", {}),
+            }
+    
+    def run_sync(
+        self,
+        task: str,
+        project_path: str = ".",
+        auto_approve: bool = False,
+    ) -> dict:
+        """同步运行工作流（阻塞调用）"""
+        return asyncio.get_event_loop().run_until_complete(
+            self.run(task, project_path, auto_approve)
+        )
+    
+    def run_stream(
+        self,
+        task: str,
+        project_path: str = ".",
+        auto_approve: bool = False,
+    ):
+        """流式运行工作流（逐节点返回结果）"""
+        from src.workflows.states import create_dynamic_initial_state
+        from src.plan.graph import PlanGraph
+        
+        initial_state = create_dynamic_initial_state(
+            task=task,
+            plan_graph=PlanGraph(id="adhoc", task=task),
+            project_path=project_path,
+        )
+        initial_state["auto_approve"] = auto_approve
+        
+        for chunk in self.app.stream(initial_state):
+            yield chunk
+```
+
+### 6.2 与 Phase 4 的关系
+
+| Phase 4 组件 | WorkflowRunner 如何使用 |
+|-------------|------------------------|
+| DynamicWorkflowBuilder | 从 PlanGraph 编译为 LangGraph app |
+| ExecutorRegistry | 提供 Executor 实例池 |
+| VerifierFramework | 注册验证规则到 app 的条件边 |
+| DynamicWorkflowState | 作为 LangGraph StateGraph 的状态类型 |
+
+---
+
+## 七、配置模板继承机制
+
+### 7.1 YAML extends 语法支持
+
+ConfigLoader 新增 `extends` 解析逻辑：
+
+```python
+def load(self, path: str, resolve_vars: bool = True) -> WorkflowConfig:
+    """加载单个配置文件，自动处理 extends 继承"""
+    file_path = self._resolve_path(path)
+    
+    with open(file_path, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+    
+    # 检查 extends 字段
+    if "extends" in raw:
+        parent_name = raw.pop("extends")
+        # 先加载父模板（递归支持多层继承）
+        parent_config = self.load_builtin(parent_name) if "/" not in parent_name else self.load(parent_name)
+        # 深度合并：当前配置覆盖父配置
+        parent_data = parent_config.model_dump(by_alias=True)
+        merged = self._deep_merge(parent_data, raw)
+        config = WorkflowConfig(**merged)
+    else:
+        config = WorkflowConfig(**raw)
+    
+    if resolve_vars:
+        config = config.resolve_vars()
+    
+    config = config.merge_executor_defaults()
+    
+    self._configs[config.name] = config
+    return config
+```
+
+### 7.2 继承示例
+
+```yaml
+# config/workflows/with-lint.yaml
+extends: software-development    # 继承内置模板
+
+# 只需定义差异部分
+executors:
+  linter:
+    model: qwen3.6-plus
+    tools: [bash]
+
+flow_template:
+  nodes:
+    - id: lint
+      type: linter
+      label: "代码检查"
+      depends_on: [review]
+  
+  edges:
+    - from: review
+      to: lint
+    - from: lint
+      to: test
+```
+
+---
+
+## 八、CLI 接口设计
 
 ### 7.1 新命令
 

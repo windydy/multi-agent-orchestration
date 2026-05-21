@@ -11,10 +11,10 @@
 
 | 文档 | 状态 | 优先级 |
 |------|------|--------|
-| Phase 4 (P/E/V 架构) | ✅ 已修复 | 🟢 P0 |
-| Phase 5 (配置化编排) | ✅ 已修复 | 🟢 P0 |
-| Phase 6 (领域 Agent) | ⚠️ 需修改 | 🟡 P1 |
-| Phase 7 (生产级能力) | ✅ 已修复 | 🟢 P0 |
+| Phase 4 (P/E/V 架构) | ✅ 已修复 | 🟢 P0+P1 |
+| Phase 5 (配置化编排) | ✅ 已修复 | 🟢 P0+P1 |
+| Phase 6 (领域 Agent) | ✅ 已修复 | 🟢 P0+P1 |
+| Phase 7 (生产级能力) | ✅ 已修复 | 🟢 P0+P1 |
 | Phase 8 (高级特性) | ✅ 基本可用 | 🟢 P2 |
 
 ---
@@ -331,17 +331,17 @@ Phase 4-7 原多处使用 `threading.Lock`，现已全部替换为 `asyncio.Lock
 
 ### 4.2 P1 级别（重要）
 
-5. **统一配置格式**: Phase 6 的配置示例应严格遵循 Phase 5 的 Schema，或在文档中明确声明两套格式的兼容策略。
+5. **✅ 统一配置格式**: Phase 6 全部 4 个配置示例（10.1-10.4）已重写为严格遵循 Phase 5 的 YAML Schema（version/name/executors/flow_template/verifiers/cost_control）。原 `schema_version/meta/defaults/nodes/conditions` 格式已移除。
 
-6. **统一 Verifier 规则定义**: 明确 Phase 4/5/7 三套规则定义之间的关系和转换路径。
+6. **✅ 统一 Verifier 规则定义**: Phase 4 新增 §8 "Verifier 规则体系统一说明"，明确三层规则（YAML配置层 → 代码级VerificationRule → 维度阈值层）的关系和转换路径。提供 `yaml_rule_to_verification_rule()` 映射函数。
 
-7. **补充 WorkflowRunner 接口**: Phase 4 和 Phase 5 都依赖 WorkflowRunner，但接口定义缺失。
+7. **✅ 补全 WorkflowRunner 接口**: Phase 5 新增 §6 WorkflowRunner 完整接口定义，包含 `run()`/`run_sync()`/`run_stream()` 三种运行模式，超时控制和异常处理。
 
-8. **实现模板继承**: Phase 5 的 `extends` 机制应在 `ConfigLoader` 中实现。
+8. **✅ 实现模板继承**: Phase 5 新增 §7 配置模板继承机制，ConfigLoader.load() 支持 `extends` 语法，自动加载父模板并深度合并。
 
-9. **统一成本配置字段名**: Phase 5 的 `warning`/`limit`/`stop` 与 Phase 7 的 `warning_threshold`/`limit_threshold`/`stop_threshold` 统一。
+9. **✅ 统一成本配置字段名**: Phase 5 `CostControlConfig` 字段从 `warning/limit/stop` 统一重命名为 `warning_threshold/limit_threshold/stop_threshold`，与 Phase 7 `CostBudget` 完全对齐。YAML 示例和字段说明表同步更新。
 
-10. **补充可观测性与现有 hooks 的集成说明**: Phase 7 应说明新组件与 Phase 1-3 hooks 的关系。
+10. **✅ 补充可观测性与现有 hooks 的集成说明**: Phase 4 新增 §8.4 表格，明确 Phase 7 每个可观测性组件与 Phase 1-3 hooks 的关系（替代/增强/互补/新增）。
 
 ### 4.3 P2 级别（建议）
 
