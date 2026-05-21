@@ -53,6 +53,21 @@ class TestAgentExecutorCreation:
 class TestAgentExecutorExecute:
     """AgentExecutor execute 方法"""
 
+    def test_execute_with_none_agent(self):
+        """agent 为 None 时返回错误"""
+        ex = AgentExecutor(
+            executor_id="none-1",
+            name="none-agent",
+            agent=None,
+            capability=ExecutorCapability.GENERIC,
+        )
+        node = PlanNode(id="n1", name="test")
+        result = asyncio.get_event_loop().run_until_complete(
+            ex.execute(node, {})
+        )
+        assert result["success"] is False
+        assert "没有关联的 agent" in result["error"]
+
     def test_execute_delegates_to_agent(self):
         """execute 调用 agent.run()"""
 

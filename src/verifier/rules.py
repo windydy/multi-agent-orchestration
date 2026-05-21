@@ -13,6 +13,8 @@ import asyncio
 import subprocess
 import logging
 
+import shlex
+
 logger = logging.getLogger(__name__)
 
 
@@ -114,20 +116,28 @@ class VerifierFramework:
     async def verify_all(self, node_id: str, context: dict) -> VerificationResult:
         """
         执行所有已注册的规则。
-        
-        Args:
-            node_id: 节点 ID
-            context: 执行上下文（包含 output 等）
-            
-        Returns:
-            VerificationResult: 验证结果汇总
+        使用 asyncio.gather 并发执行所有规则。
         """
-        items = []
-        for rule in self._rules.values():
-            item = await self._execute_rule(rule, context)
-            items.append(item)
+        tasks = [self._execute_rule(rule, context) for rule in self._rules.values()]
+        items = await asyncio.gather(*tasks, return_exceptions=True)
 
-        return VerificationResult(node_id=node_id, items=items)
+        # 将异常结果转换为 VerificationItem
+        processed_items = []
+        for item in items:
+            if isinstance(item, Exception):
+                processed_items.append(
+                    VerificationItem(
+                        rule_id="unknown",
+                        dimension=VerificationDimension.QUALITY,
+                        status=VerificationStatus.FAILED,
+                        score=0.0,
+                        message=f"Rule execution error: {item}",
+                    )
+                )
+            else:
+                processed_items.append(item)
+
+        return VerificationResult(node_id=node_id, items=processed_items)
 
     async def _execute_rule(
         self, rule: VerificationRule, context: dict
@@ -135,9 +145,33 @@ class VerifierFramework:
         """执行单条验证规则"""
         try:
             if rule.check:
-                # shell 命令检查
-                proc = await asyncio.create_subprocess_shell(
-                    rule.check,
+                # 使用 shlex.split 安全分割命令，避免命令注入
+                try:
+                    cmd_parts = shlex.split(rule.check)
+                except ValueError as e:
+                    return VerificationItem(
+                        rule_id=rule.rule_id,
+                        dimension=rule.dimension,
+                        status=VerificationStatus.FAILED,
+                        score=0.0,
+                        message=f"Invalid command syntax: {e}",
+                    )
+
+                # 安全校验：禁止管道、重定向、&& 等 shell 特性
+                dangerous = {"|", ">", "<", "&&", "||", ";", "`", "$(", "$(", ">>"}
+                for part in cmd_parts:
+                    if part in dangerous:
+                        return VerificationItem(
+                            rule_id=rule.rule_id,
+                            dimension=rule.dimension,
+                            status=VerificationStatus.FAILED,
+                            score=0.0,
+                            message=f"Dangerous operator not allowed: {part}",
+                        )
+
+                # 使用 create_subprocess_exec 替代 create_subprocess_shell
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd_parts,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )

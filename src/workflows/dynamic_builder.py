@@ -6,6 +6,7 @@ src/workflows/dynamic_builder.py
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Callable, Awaitable
 import logging
 
@@ -115,7 +116,8 @@ class DynamicWorkflowBuilder:
                 result = await executor.execute(node, context)
 
                 node.status = NodeStatus.COMPLETED
-                node.completed_at = state.get("start_time", "")
+                node.started_at = datetime.now().isoformat()
+                node.completed_at = datetime.now().isoformat()
 
                 return {
                     "executor_results": {node.id: result},

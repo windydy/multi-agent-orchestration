@@ -53,6 +53,12 @@ class AgentExecutor(BaseExecutor):
         """
         调用 agent.run() 执行任务。
         """
+        if self._agent is None:
+            return {
+                "success": False,
+                "error": f"Executor '{self.executor_id}' 没有关联的 agent",
+            }
+
         self.status = ExecutorStatus.RUNNING
         try:
             agent_result = await self._agent.run(
