@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ExecutionDetail } from '../types'
-import { fetchExecution } from '../lib/api'
+import { ExecutionDetail, DAGResponse } from '../types'
+import { fetchExecution, fetchDAG } from '../lib/api'
 import NodeTimeline from '../components/NodeTimeline'
+import DAGView from '../components/DAGView'
 
 const statusLabel: Record<string, { text: string; color: string }> = {
   success: { text: 'Completed', color: 'text-success' },
@@ -25,16 +26,22 @@ function formatDate(iso: string): string {
 export default function ExecutionPage() {
   const { threadId } = useParams<{ threadId: string }>()!
   const [detail, setDetail] = useState<ExecutionDetail | null>(null)
+  const [dag, setDag] = useState<DAGResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'timeline' | 'graph'>('timeline')
 
   async function load() {
     if (!threadId) return
     try {
       setLoading(true)
       setError(null)
-      const data = await fetchExecution(threadId)
-      setDetail(data)
+      const [detailData, dagData] = await Promise.all([
+        fetchExecution(threadId),
+        fetchDAG(threadId),
+      ])
+      setDetail(detailData)
+      setDag(dagData)
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -106,11 +113,39 @@ export default function ExecutionPage() {
         </div>
       )}
 
-      {/* Timeline */}
-      <div>
-        <h2 className="text-sm font-medium mb-4 text-text-subtle uppercase tracking-wider">Execution Timeline</h2>
-        <NodeTimeline nodes={detail.nodes} />
+      {/* Tabs */}
+      <div className="flex gap-4 border-b border-border">
+        {(['timeline', 'graph'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`pb-2 text-sm font-medium transition-colors ${
+              activeTab === tab
+                ? 'text-accent border-b-2 border-accent'
+                : 'text-text-subtle hover:text-text'
+            }`}
+          >
+            {tab === 'timeline' ? 'Timeline' : 'Graph'}
+          </button>
+        ))}
       </div>
+
+      {/* Tab content */}
+      {activeTab === 'timeline' ? (
+        <div>
+          <h2 className="text-sm font-medium mb-4 text-text-subtle uppercase tracking-wider">Execution Timeline</h2>
+          <NodeTimeline nodes={detail.nodes} />
+        </div>
+      ) : (
+        <div>
+          <h2 className="text-sm font-medium mb-4 text-text-subtle uppercase tracking-wider">Workflow DAG</h2>
+          {dag ? (
+            <DAGView dag={dag} />
+          ) : (
+            <div className="text-text-subtle text-sm py-8 text-center">Loading graph…</div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

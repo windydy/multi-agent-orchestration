@@ -1,4 +1,4 @@
-import type { OverviewStats, ExecutionListResponse, ExecutionDetail } from '../types'
+import type { OverviewStats, ExecutionListResponse } from '../types'
 
 const API_BASE = '/api'
 
@@ -23,8 +23,14 @@ export async function fetchExecutions(
   return res.json()
 }
 
-export async function fetchExecution(threadId: string): Promise<ExecutionDetail> {
-  const res = await fetch(`${API_BASE}/executions/${threadId}`)
-  if (!res.ok) throw new Error(`Failed to fetch execution: ${res.status}`)
+export async function fetchExecution(threadId: string) {
+  const res = await fetch(`/api/executions/${threadId}`)
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function fetchDAG(threadId: string) {
+  const res = await fetch(`/api/executions/${threadId}/dag`)
+  if (!res.ok) throw new Error(await res.text())
   return res.json()
 }

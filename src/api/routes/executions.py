@@ -84,12 +84,17 @@ async def create_execution(req: CreateExecutionRequest):
     P0-4: Uses asyncio.Lock internally for state safety.
     """
     em = _get_em()
+    log = _get_log()
     handle = await em.create_execution(
         task=req.task,
         workflow=req.workflow,
         project_path=req.project_path,
         model_config=req.models,
     )
+    # Log the execution_started event so read endpoints can find it
+    import time
+    log.log(handle.thread_id, "execution_started", time.time(),
+            data={"task_input": req.task, "workflow": req.workflow})
     return CreateExecutionResponse(
         thread_id=handle.thread_id,
         status=handle.status,

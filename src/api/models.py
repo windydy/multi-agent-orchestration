@@ -67,3 +67,29 @@ class OverviewStats(BaseModel):
     interrupted: int = 0
     total_cost_24h: float = 0.0
     total_tokens_24h: int = 0
+
+
+class DAGNode(BaseModel):
+    """DAG graph node with execution status."""
+    id: str
+    label: str
+    status: str
+    started_at: Optional[float] = None
+    ended_at: Optional[float] = None
+    duration_ms: Optional[int] = None
+    token_usage: Optional[dict] = None
+    output_summary: Optional[str] = None
+    cost: Optional[float] = None
+
+
+class DAGEdge(BaseModel):
+    """DAG graph edge representing a dependency."""
+    from_node: str
+    to_node: str
+
+
+class DAGResponse(BaseModel):
+    """DAG visualization response."""
+    thread_id: str
+    nodes: list[DAGNode]
+    edges: list[DAGEdge]

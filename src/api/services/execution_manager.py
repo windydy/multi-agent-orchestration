@@ -229,20 +229,6 @@ class ExecutionManager:
             self._persist(handle)
             return True
 
-    async def bind_task(self, thread_id: str, task: asyncio.Task) -> bool:
-        """P0-1: Bind the LangGraph asyncio.Task to an existing ExecutionHandle.
-
-        Called by the LangGraph runner immediately after starting the execution
-        task, so that cancel_execution() can call task.cancel() on it.
-        """
-        async with self._lock:
-            handle = self._executions.get(thread_id)
-            if not handle:
-                return False
-            handle.task_handle = task
-            self._persist(handle)
-            return True
-
     async def complete_execution(self, thread_id: str, status: str = "completed") -> bool:
         """Mark an execution as completed/failed. Called by the LangGraph runner."""
         async with self._lock:

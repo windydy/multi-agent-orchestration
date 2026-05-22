@@ -11,6 +11,8 @@ PROJECT_VENV_PYTHON = "/Users/windydy/Working/multi-agent-orchestration/.venv/bi
 HERMES_VENV_PYTHON = "/Users/windydy/.hermes/hermes-agent/venv/bin/python"
 PROJECT_DIR = "/Users/windydy/Working/multi-agent-orchestration"
 
+PLAYWRIGHT_PYTHON = PROJECT_VENV_PYTHON
+
 def setup_playwright():
     """Install playwright if needed"""
     subprocess.run([

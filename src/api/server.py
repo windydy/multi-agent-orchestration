@@ -14,6 +14,7 @@ from .routes.execution_read import set_event_log as set_read_event_log
 from .routes.executions import router as executions_router, set_execution_manager, set_event_log as set_exec_event_log
 from .routes.files import router as files_router, set_project_root
 from .routes.workflows import router as workflows_router
+from .routes.dag import set_event_log as set_dag_event_log
 
 _event_log: EventLog | None = None
 _execution_manager: ExecutionManager | None = None
@@ -21,7 +22,7 @@ _project_root: str = ""
 _static_dir: str = ""
 
 
-def create_app(db_path: str | None = None) -> FastAPI:
+def create_app(db_path: str | None = None, state_db_path: str | None = None) -> FastAPI:
     """Create the FastAPI application."""
     global _event_log, _execution_manager, _project_root, _static_dir
 
@@ -36,10 +37,12 @@ def create_app(db_path: str | None = None) -> FastAPI:
     _event_log = EventLog(db_path=db_path)
     set_read_event_log(_event_log)
     set_exec_event_log(_event_log)
+    set_dag_event_log(_event_log)
 
     # P0-2: Initialize ExecutionManager with SQLite persistence
-    exec_db_path = os.path.join(_project_root, "checkpoints", "execution_state.db")
-    _execution_manager = ExecutionManager(db_path=exec_db_path)
+    if state_db_path is None:
+        state_db_path = os.path.join(_project_root, "checkpoints", "execution_state.db")
+    _execution_manager = ExecutionManager(db_path=state_db_path)
     set_execution_manager(_execution_manager)
 
     # P0-3: Set project root for file access validation

@@ -6,6 +6,29 @@ export interface OverviewStats {
   interrupted: number
 }
 
+export interface DAGNode {
+  id: string
+  label: string
+  status: string
+  started_at: number | null
+  ended_at: number | null
+  duration_ms: number | null
+  token_usage: { input: number; output: number } | null
+  output_summary: string | null
+  cost: number | null
+}
+
+export interface DAGEdge {
+  from_node: string
+  to_node: string
+}
+
+export interface DAGResponse {
+  thread_id: string
+  nodes: DAGNode[]
+  edges: DAGEdge[]
+}
+
 export interface ExecutionItem {
   thread_id: string
   workflow_name: string

@@ -30,7 +30,7 @@ class TestInit:
     def test_creates_table(self, tmp_db):
         event_log = EventLog(db_path=tmp_db)
         # Should not raise - table exists
-        event_log._conn.execute("SELECT * FROM execution_events LIMIT 0")
+        event_log._get_conn().execute("SELECT * FROM execution_events LIMIT 0")
 
 
 class TestLog:
@@ -42,7 +42,7 @@ class TestLog:
             timestamp=time.time(),
             data={"prompt": "build a web app"},
         )
-        rows = list(event_log._conn.execute("SELECT * FROM execution_events"))
+        rows = list(event_log._get_conn().execute("SELECT * FROM execution_events"))
         assert len(rows) == 1
         assert rows[0][1] == "t1"
         assert rows[0][2] == "execution_started"
@@ -54,7 +54,7 @@ class TestLog:
             node_name="requirements",
             timestamp=time.time(),
         )
-        rows = list(event_log._conn.execute("SELECT * FROM execution_events"))
+        rows = list(event_log._get_conn().execute("SELECT * FROM execution_events"))
         assert len(rows) == 1
         assert rows[0][3] == "requirements"
 
@@ -66,7 +66,7 @@ class TestLog:
             timestamp=time.time(),
             data={"output": "design doc"},
         )
-        rows = list(event_log._conn.execute("SELECT * FROM execution_events"))
+        rows = list(event_log._get_conn().execute("SELECT * FROM execution_events"))
         assert len(rows) == 1
 
     def test_log_node_failed(self, event_log):
@@ -77,7 +77,7 @@ class TestLog:
             timestamp=time.time(),
             data={"error": "syntax error"},
         )
-        rows = list(event_log._conn.execute("SELECT * FROM execution_events"))
+        rows = list(event_log._get_conn().execute("SELECT * FROM execution_events"))
         assert len(rows) == 1
 
     def test_log_execution_completed(self, event_log):
@@ -86,7 +86,7 @@ class TestLog:
             event_type="execution_completed",
             timestamp=time.time(),
         )
-        rows = list(event_log._conn.execute("SELECT * FROM execution_events"))
+        rows = list(event_log._get_conn().execute("SELECT * FROM execution_events"))
         assert len(rows) == 1
 
     def test_log_interrupted(self, event_log):
@@ -95,7 +95,7 @@ class TestLog:
             event_type="interrupted",
             timestamp=time.time(),
         )
-        rows = list(event_log._conn.execute("SELECT * FROM execution_events"))
+        rows = list(event_log._get_conn().execute("SELECT * FROM execution_events"))
         assert len(rows) == 1
 
     def test_data_stored_as_json(self, event_log):
@@ -105,14 +105,14 @@ class TestLog:
             timestamp=time.time(),
             data={"key": "value", "nested": {"a": 1}},
         )
-        rows = list(event_log._conn.execute("SELECT * FROM execution_events"))
+        rows = list(event_log._get_conn().execute("SELECT * FROM execution_events"))
         assert rows[0][5] == '{"key": "value", "nested": {"a": 1}}'
 
     def test_log_multiple_events(self, event_log):
         event_log.log(thread_id="t1", event_type="execution_started", timestamp=1.0)
         event_log.log(thread_id="t1", event_type="node_started", node_name="req", timestamp=2.0)
         event_log.log(thread_id="t2", event_type="execution_started", timestamp=3.0)
-        rows = list(event_log._conn.execute("SELECT * FROM execution_events"))
+        rows = list(event_log._get_conn().execute("SELECT * FROM execution_events"))
         assert len(rows) == 3
 
 
