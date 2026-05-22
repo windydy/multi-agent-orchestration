@@ -158,10 +158,23 @@ class ClaudeAgentWrapper(BaseAgent):
                 config = yaml.safe_load(f) or {}
             
             model_config = config.get("model", {})
-            return {
+            # 支持 custom provider 配置
+            result = {
                 "api_key": model_config.get("api_key"),
                 "base_url": model_config.get("base_url"),
             }
+            
+            # 如果是 custom provider，也检查 providers 配置
+            if model_config.get("provider") == "custom":
+                providers = config.get("providers", {})
+                if providers:
+                    for name, pconf in providers.items():
+                        if pconf.get("base_url"):
+                            result.setdefault("base_url", pconf.get("base_url"))
+                        if pconf.get("api_key"):
+                            result.setdefault("api_key", pconf.get("api_key"))
+            
+            return result
         except Exception:
             return {}
     
@@ -252,7 +265,12 @@ class ClaudeAgentWrapper(BaseAgent):
                     
                 else:
                     # 无工具调用，获取最终输出
-                    final_output = "\n".join([b.text for b in text_blocks])
+                    # 注意：qwen 等模型可能返回 ThinkingBlock + TextBlock
+                    final_output = ""
+                    for b in text_blocks:
+                        if hasattr(b, 'text'):
+                            final_output += b.text + "\n"
+                    final_output = final_output.rstrip()
                     break
             
             # 记录历史

@@ -76,6 +76,16 @@ class DevelopmentPipelineBuilder:
     使用LangGraph构建多Agent协作的开发流水线。
     """
     
+    # 节点名称 → WorkflowState 字段名的映射
+    NODE_TO_FIELD: dict[str, str] = {
+        "requirements": "requirements",
+        "design": "design",
+        "develop": "code_changes",
+        "review": "review_result",
+        "test": "test_result",
+        "fix": "fix_result",
+    }
+    
     def __init__(self, config: PipelineConfig = None):
         self.config = config or PipelineConfig()
         
@@ -137,7 +147,9 @@ class DevelopmentPipelineBuilder:
         nodes = {}
         
         for name, agent in self._agents.items():
-            async def node_func(state: WorkflowState, agent_name=name) -> dict:
+            field = self.NODE_TO_FIELD.get(name, name)
+            
+            async def node_func(state: WorkflowState, agent_name=name, field_name=field) -> dict:
                 """节点执行函数"""
                 # 构建上下文
                 context = {
@@ -148,10 +160,10 @@ class DevelopmentPipelineBuilder:
                 # 执行Agent
                 result = await agent.run(state.get("task", ""), context)
                 
-                # 构建状态更新
+                # 构建状态更新 — 写入正确的字段名
                 updates = {
                     "current_stage": agent_name,
-                    agent_name: result.output if result.success else {"error": result.error},
+                    field_name: result.output if result.success else {"error": result.error},
                     "messages": [{
                         "role": agent_name,
                         "content": str(result.output)[:500],  # 截断长内容
@@ -183,8 +195,9 @@ class DevelopmentPipelineBuilder:
         
         prev = {}
         for dep in dependencies.get(current_agent, []):
-            if state.get(dep):
-                prev[dep] = state.get(dep)
+            field = self.NODE_TO_FIELD.get(dep, dep)
+            if state.get(field):
+                prev[field] = state.get(field)
         
         return prev
     
@@ -196,8 +209,8 @@ class DevelopmentPipelineBuilder:
         - needs_revision -> develop (返回修改)
         - human -> 等待人工审批
         """
-        # Agent输出存储在 state["review"] 中
-        review_result = state.get("review", {})
+        # Agent输出存储在 state["review_result"] 中
+        review_result = state.get("review_result", {})
         
         # 如果review_result是字符串（简单输出），解析JSON或默认通过
         if isinstance(review_result, str):
@@ -232,8 +245,8 @@ class DevelopmentPipelineBuilder:
         - fixable -> fix
         - needs_help -> human_review
         """
-        # Agent输出存储在 state["test"] 中
-        test_result = state.get("test", {})
+        # Agent输出存储在 state["test_result"] 中
+        test_result = state.get("test_result", {})
         
         # 如果test_result是字符串（简单输出），解析JSON或默认通过
         if isinstance(test_result, str):

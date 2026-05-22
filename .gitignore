@@ -6,3 +6,6 @@ __pycache__/
 venv/
 .env
 checkpoints/
+web/node_modules/
+web/dist/
+*.tsbuildinfo

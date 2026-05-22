@@ -17,21 +17,14 @@ REQUIREMENTS_SYSTEM_PROMPT = """
 1. 分析用户需求，提取关键功能点
 2. 识别技术约束和依赖关系
 3. 澄清模糊需求，提出澄清问题
-4. 输出结构化的需求文档
+4. 输出结构化的 Markdown 格式需求文档
 
-输出格式：
-{
-    "functional_requirements": [
-        {"id": "FR-001", "description": "功能描述", "priority": "high/medium/low"}
-    ],
-    "non_functional_requirements": [
-        {"id": "NFR-001", "type": "性能/安全/可用性", "description": "描述"}
-    ],
-    "constraints": ["技术约束列表"],
-    "dependencies": ["依赖项列表"],
-    "clarification_questions": ["需要澄清的问题"],
-    "assumptions": ["已做的假设"]
-}
+输出要求：
+- 使用 Markdown 格式，包含标题、列表、表格等
+- 包含以下章节：功能需求、非功能需求、技术约束、依赖项、待澄清问题、假设
+- 功能需求用表格展示（ID、描述、优先级）
+- 语言简洁专业，适合团队阅读
+- 不要输出 JSON，只输出 Markdown 文档
 
 使用search工具查找相关代码，使用read_file理解现有结构。
 在分析过程中保持客观，不要做出未验证的技术选择。
