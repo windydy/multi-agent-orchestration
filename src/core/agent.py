@@ -96,6 +96,10 @@ class BaseAgent(ABC):
         """获取状态变更历史"""
         return self._history
     
+    def get_config(self) -> AgentConfig:
+        """获取Agent配置"""
+        return self.config
+    
     def _get_timestamp(self) -> str:
         from datetime import datetime
         return datetime.now().isoformat()

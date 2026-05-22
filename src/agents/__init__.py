@@ -11,6 +11,13 @@ from .reviewer import ReviewerAgent, create_reviewer_agent
 from .tester import TesterAgent, create_tester_agent
 from .fixer import FixerAgent, create_fixer_agent
 
+# Phase 6: 领域专业 Agent
+from .devops import DevOpsAgent
+from .security import SecurityAgent
+from .data import DataAgent
+from .architect import ArchitectAgent
+from .product_manager import ProductManagerAgent
+
 __all__ = [
     "RequirementsAgent",
     "DesignerAgent",
@@ -24,4 +31,10 @@ __all__ = [
     "create_reviewer_agent",
     "create_tester_agent",
     "create_fixer_agent",
+    # Phase 6
+    "DevOpsAgent",
+    "SecurityAgent",
+    "DataAgent",
+    "ArchitectAgent",
+    "ProductManagerAgent",
 ]

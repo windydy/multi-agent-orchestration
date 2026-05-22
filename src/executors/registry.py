@@ -121,3 +121,22 @@ class ExecutorRegistry:
             if executor is not None:
                 result.append(executor)
         return result
+
+    def get_by_name(self, name: str) -> Optional[BaseExecutor]:
+        """按名称查找 Executor"""
+        for eid, executor in self._executors.items():
+            if executor.name == name or executor.executor_id == name:
+                return executor
+        return None
+
+    def find_by_capability(self, capability: ExecutorCapability) -> Optional[BaseExecutor]:
+        """按能力查找第一个匹配的 Executor"""
+        result = self.find_best(capability)
+        if result is not None:
+            return result
+        # 降级查找 GENERIC
+        for eid in self._capability_index.get(ExecutorCapability.GENERIC, []):
+            executor = self._executors.get(eid)
+            if executor and not executor.status.is_busy:
+                return executor
+        return None
