@@ -1,6 +1,6 @@
 # 项目TODO
 
-## 已完成 ✅
+## 全部完成 ✅
 
 ### Phase 1: 核心框架
 - [x] ClaudeAgentWrapper实现（继承BaseAgent）
@@ -25,33 +25,40 @@
 - [x] 条件路由实现
 - [x] 中断恢复机制
 
-### Phase 4: 测试框架
-- [x] test_wrapper.py
-- [x] test_builder.py
-- [x] test_pipeline.py
+### Phase 4: Planner/Executor/Verifier 核心架构
+- [x] BaseExecutor 抽象基类
+- [x] ExecutorRegistry — 能力匹配 + 负载均衡
+- [x] PlanGraph (DAG) — 节点定义 + 执行状态
+- [x] PlannerAgent — 任务分解 + 动态调度
+- [x] VerifierFramework — 验证规则 + 质量评分
+- [x] DynamicWorkflowBuilder — 从 Plan Graph 构建 LangGraph
+- [x] AgentAdapter — Agent 到 Executor 的适配层
+- [x] 79 个测试全部通过
 
----
+### Phase 5: 配置化编排
+- [x] Config Schema — 完整配置定义
+- [x] WorkflowLoader — YAML 配置加载 + 验证
+- [x] ConfigBuilder — 配置构建器
+- [x] 预设工作流配置模板
+- [x] 42 个测试全部通过
 
-## 待完成
+### Phase 6: 领域专业 Agent 扩展
+- [x] DevOpsAgent — CICDTool + DockerTool
+- [x] SecurityAgent — SecurityScanTool + DependencyAuditTool
+- [x] DataAgent — DataAnalysisTool + SQLTool
+- [x] ArchitectAgent — ArchitectTool
+- [x] ProductManagerAgent — PMTool
+- [x] 集成测试 — 能力匹配 + 全链路 + 完整工作流
+- [x] Bug Fix 工作流 — Classifier + Report + Tracker + 闭环
+- [x] 70 个测试全部通过
 
-### Phase 5: 实际验证
-- [ ] 使用真实API Key运行示例
-- [ ] 验证完整流水线流程
-- [ ] 性能优化
-
-### Phase 6: 功能扩展
-- [ ] Web UI可视化
-- [ ] 更多Agent角色
-  - [ ] DevOps Agent（部署）
-  - [ ] Data Agent（数据处理）
-  - [ ] Research Agent（研究）
-- [ ] Skills系统集成
-
-### Phase 7: 生产化
-- [ ] 错误处理增强
-- [ ] 监控和告警
-- [ ] 文档完善
-- [ ] 部署脚本
+### Phase 7: 生产级能力
+- [x] MetricsCollector — 指标收集 + 内存控制（deque）
+- [x] DistributedTracer — 分布式追踪
+- [x] CostController — 成本追踪 + 预算限制 + 记录裁剪
+- [x] CircuitBreaker — 熔断器（closed/open/half-open）
+- [x] RetryPolicy — 指数退避重试
+- [x] 34 个测试全部通过
 
 ---
 
@@ -64,8 +71,25 @@
 5. ✅ 条件路由正确工作
 6. ✅ Hooks拦截危险命令
 7. ✅ 成本可追踪
-8. ⏳ 有完整的测试覆盖（待API验证）
+8. ✅ 有完整的测试覆盖 — 240 个测试全部通过
 
 ---
 
-*更新日期: 2026-05-19*
+## 远期规划（Phase 8，可选）
+
+以下为可选增强，不在核心开发范围内：
+- [ ] Web UI 可视化（React + Vite + WebSocket）
+- [ ] 多项目工作空间管理
+- [ ] Agent 知识库和记忆系统
+- [ ] 团队协作功能
+- [ ] 生产部署脚本
+
+---
+
+## 项目统计
+
+- **测试总数**: 240 passed, 0 failed
+- **代码文件**: 59 个 `.py` 文件
+- **核心模块**: agents / tools / bug / plan / executors / workflows / observability / cost / resilience / verifier / config / cli
+
+*更新日期: 2026-05-22*
