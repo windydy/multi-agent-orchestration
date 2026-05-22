@@ -9,6 +9,7 @@ from ..core.agent import AgentConfig, AgentRole
 from ..claude.wrapper import ClaudeAgentWrapper, ClaudeSDKConfig, ClaudeToolType
 from ..claude.hooks import create_hooks
 from ..plan.graph import ExecutorCapability
+from ..tools.pm_tool import PMTool
 
 
 # Product Manager Agent 系统提示词
@@ -115,6 +116,12 @@ class ProductManagerAgent(ClaudeAgentWrapper):
         hooks = hooks or create_hooks(safety=True, logging=True, cost_control=True)
 
         super().__init__(config, claude_config, hooks)
+
+        self._domain_tools = [PMTool()]
+
+    def _get_domain_tools(self) -> list:
+        """返回领域专用工具列表"""
+        return self._domain_tools
 
     def get_capabilities(self) -> list[ExecutorCapability]:
         return [
