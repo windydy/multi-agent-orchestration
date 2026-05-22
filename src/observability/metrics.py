@@ -71,6 +71,14 @@ class MetricsCollector:
             self._record_point(MetricPoint(name, value, time.time(), labels or {}))
     
     # --- 快捷方法 ---
+    def get_counter(self, name: str) -> float:
+        """获取当前计数器值"""
+        return self._counters.get(name, 0)
+
+    def get_gauge(self, name: str) -> Optional[float]:
+        """获取当前仪表值"""
+        return self._gauges.get(name)
+
     def record_execution(self, agent: str, duration: float, success: bool, cost: float):
         """记录一次 Agent 执行"""
         self.increment("agent_executions_total", labels={"agent": agent, "success": str(success)})
