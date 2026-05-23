@@ -13,9 +13,11 @@ export default function ConfigPage() {
   const [yamlContent, setYamlContent] = useState('')
   const [validationError, setValidationError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   async function loadAll() {
     setLoading(true)
+    setError(null)
     try {
       const [aRes, vRes, wRes] = await Promise.all([
         fetch('/api/config/agents').then(r => r.json()),
@@ -25,8 +27,8 @@ export default function ConfigPage() {
       setAgents(aRes.agents)
       setVerifiers(vRes.rules)
       setWorkflows(wRes.workflows)
-    } catch {
-      // Ignore errors
+    } catch (e: any) {
+      setError(e.message || 'Failed to load configuration')
     } finally {
       setLoading(false)
     }
@@ -35,44 +37,57 @@ export default function ConfigPage() {
   useEffect(() => { loadAll() }, [])
 
   async function handleAgentToggle(id: string, enabled: boolean) {
-    await fetch(`/api/config/agents/${id}`, {
+    const res = await fetch(`/api/config/agents/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled }),
     })
-    await loadAll()
+    if (!res.ok) {
+      alert(`Failed to update agent: ${await res.text()}`)
+      return
+    }
+    setAgents(prev => prev.map(a => a.id === id ? { ...a, enabled } : a))
   }
 
   async function handleAgentModelChange(id: string, model: string) {
-    await fetch(`/api/config/agents/${id}`, {
+    const res = await fetch(`/api/config/agents/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model }),
     })
-    await loadAll()
+    if (!res.ok) {
+      alert(`Failed to update agent: ${await res.text()}`)
+      return
+    }
+    setAgents(prev => prev.map(a => a.id === id ? { ...a, model } : a))
   }
 
   async function handleVerifierCreate(rule: any) {
-    await fetch('/api/config/verifiers', {
+    const res = await fetch('/api/config/verifiers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(rule),
     })
-    await loadAll()
+    if (!res.ok) return
+    const created = await res.json()
+    setVerifiers(prev => [...prev, created])
   }
 
   async function handleVerifierUpdate(id: string, updates: any) {
-    await fetch(`/api/config/verifiers/${id}`, {
+    const res = await fetch(`/api/config/verifiers/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     })
-    await loadAll()
+    if (!res.ok) return
+    const updated = await res.json()
+    setVerifiers(prev => prev.map(r => r.id === id ? updated : r))
   }
 
   async function handleVerifierDelete(id: string) {
-    await fetch(`/api/config/verifiers/${id}`, { method: 'DELETE' })
-    await loadAll()
+    const res = await fetch(`/api/config/verifiers/${id}`, { method: 'DELETE' })
+    if (!res.ok) return
+    setVerifiers(prev => prev.filter(r => r.id !== id))
   }
 
   async function handleWorkflowSelect(name: string) {
@@ -98,6 +113,15 @@ export default function ConfigPage() {
     }
     await loadAll()
     setSelectedWorkflow(null)
+  }
+
+  if (error) {
+    return (
+      <div className="text-error text-sm py-16 text-center">
+        <p>{error}</p>
+        <button onClick={loadAll} className="text-accent text-xs mt-2 hover:underline">Retry</button>
+      </div>
+    )
   }
 
   if (loading) {
