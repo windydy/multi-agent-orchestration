@@ -1,6 +1,6 @@
 """Config management API routes (Phase 4)."""
 
-from typing import Optional
+from typing import Literal, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -64,10 +64,10 @@ class AgentUpdateRequest(BaseModel):
 class VerifierResponse(BaseModel):
     id: str
     name: str
-    condition: str
+    condition: Literal["token_limit", "cost_threshold", "node_timeout"]
     threshold: float
-    action: str
-    severity: str
+    action: Literal["warn", "fail", "retry"]
+    severity: Literal["low", "medium", "high"]
     enabled: bool
     created_at: float
     updated_at: float
@@ -79,22 +79,23 @@ class VerifierListResponse(BaseModel):
 
 class VerifierCreateRequest(BaseModel):
     name: str = Field(min_length=1)
-    condition: str
+    condition: Literal["token_limit", "cost_threshold", "node_timeout"]
     threshold: float
-    action: str
-    severity: str = "medium"
+    action: Literal["warn", "fail", "retry"]
+    severity: Literal["low", "medium", "high"] = "medium"
 
 
 class VerifierUpdateRequest(BaseModel):
     threshold: Optional[float] = None
     enabled: Optional[bool] = None
-    action: Optional[str] = None
-    severity: Optional[str] = None
+    action: Optional[Literal["warn", "fail", "retry"]] = None
+    severity: Optional[Literal["low", "medium", "high"]] = None
 
 
 # ── Workflow Config Routes ──
+# P0-1 fix: Use /config prefix (no /api) — server.py handles /api prefix
 
-@router.get("/api/config/workflows", response_model=WorkflowListResponse)
+@router.get("/config/workflows", response_model=WorkflowListResponse)
 async def list_workflows():
     store = _get_store()
     workflows = store.list_workflows()
@@ -103,7 +104,7 @@ async def list_workflows():
     )
 
 
-@router.get("/api/config/workflows/{name}", response_model=WorkflowResponse)
+@router.get("/config/workflows/{name}", response_model=WorkflowResponse)
 async def get_workflow(name: str):
     store = _get_store()
     wf = store.get_workflow(name)
@@ -112,7 +113,7 @@ async def get_workflow(name: str):
     return WorkflowResponse(**wf.__dict__)
 
 
-@router.put("/api/config/workflows/{name}", response_model=WorkflowResponse)
+@router.put("/config/workflows/{name}", response_model=WorkflowResponse)
 async def upsert_workflow(name: str, req: WorkflowCreateRequest):
     store = _get_store()
     try:
@@ -124,9 +125,19 @@ async def upsert_workflow(name: str, req: WorkflowCreateRequest):
     return WorkflowResponse(**wf.__dict__)
 
 
+@router.delete("/config/workflows/{name}")
+async def delete_workflow(name: str):
+    """P0-2: Delete a workflow configuration."""
+    store = _get_store()
+    success = store.delete_workflow(name)
+    if not success:
+        raise HTTPException(404, f"Workflow '{name}' not found")
+    return {"status": "deleted"}
+
+
 # ── Agent Config Routes ──
 
-@router.get("/api/config/agents", response_model=AgentListResponse)
+@router.get("/config/agents", response_model=AgentListResponse)
 async def list_agents():
     store = _get_store()
     agents = store.list_agents()
@@ -135,7 +146,7 @@ async def list_agents():
     )
 
 
-@router.get("/api/config/agents/{agent_id}", response_model=AgentResponse)
+@router.get("/config/agents/{agent_id}", response_model=AgentResponse)
 async def get_agent(agent_id: str):
     store = _get_store()
     agent = store.get_agent(agent_id)
@@ -144,7 +155,7 @@ async def get_agent(agent_id: str):
     return AgentResponse(**agent.__dict__)
 
 
-@router.put("/api/config/agents/{agent_id}", response_model=AgentResponse)
+@router.put("/config/agents/{agent_id}", response_model=AgentResponse)
 async def update_agent(agent_id: str, req: AgentUpdateRequest):
     store = _get_store()
     agent = store.update_agent(agent_id, model=req.model, enabled=req.enabled)
@@ -155,7 +166,7 @@ async def update_agent(agent_id: str, req: AgentUpdateRequest):
 
 # ── Verifier Rule Routes ──
 
-@router.get("/api/config/verifiers", response_model=VerifierListResponse)
+@router.get("/config/verifiers", response_model=VerifierListResponse)
 async def list_verifiers():
     store = _get_store()
     rules = store.list_verifiers()
@@ -164,7 +175,7 @@ async def list_verifiers():
     )
 
 
-@router.post("/api/config/verifiers", response_model=VerifierResponse, status_code=201)
+@router.post("/config/verifiers", response_model=VerifierResponse, status_code=201)
 async def create_verifier(req: VerifierCreateRequest):
     store = _get_store()
     rule = store.create_verifier(
@@ -177,7 +188,7 @@ async def create_verifier(req: VerifierCreateRequest):
     return VerifierResponse(**rule.__dict__)
 
 
-@router.put("/api/config/verifiers/{rule_id}", response_model=VerifierResponse)
+@router.put("/config/verifiers/{rule_id}", response_model=VerifierResponse)
 async def update_verifier(rule_id: str, req: VerifierUpdateRequest):
     store = _get_store()
     rule = store.update_verifier(
@@ -192,7 +203,7 @@ async def update_verifier(rule_id: str, req: VerifierUpdateRequest):
     return VerifierResponse(**rule.__dict__)
 
 
-@router.delete("/api/config/verifiers/{rule_id}")
+@router.delete("/config/verifiers/{rule_id}")
 async def delete_verifier(rule_id: str):
     store = _get_store()
     success = store.delete_verifier(rule_id)

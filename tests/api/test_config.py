@@ -127,6 +127,43 @@ class TestWorkflowConfig:
         assert "flow-a" in names
         assert "flow-b" in names
 
+    def test_delete_workflow(self, client):
+        """DELETE removes a workflow."""
+        client.put("/api/config/workflows/to-delete", json={"yaml_content": VALID_WORKFLOW_YAML})
+        r = client.delete("/api/config/workflows/to-delete")
+        assert r.status_code == 200
+
+        r = client.get("/api/config/workflows/to-delete")
+        assert r.status_code == 404
+
+    def test_delete_nonexistent_workflow(self, client):
+        """DELETE nonexistent workflow returns 404."""
+        r = client.delete("/api/config/workflows/nonexistent")
+        assert r.status_code == 404
+
+    def test_reject_edge_refs_unknown_node(self, client):
+        """PUT with edge referencing unknown node returns 422."""
+        r = client.put("/api/config/workflows/bad-edge", json={
+            "yaml_content": "name: test\nnodes:\n  - name: a\nedges:\n  - from: a\n    to: b",
+        })
+        assert r.status_code == 422
+        assert "unknown node" in r.json()["detail"].lower()
+
+    def test_reject_self_loop_edge(self, client):
+        """PUT with self-loop edge returns 422."""
+        r = client.put("/api/config/workflows/self-loop", json={
+            "yaml_content": "name: test\nnodes:\n  - name: a\nedges:\n  - from: a\n    to: a",
+        })
+        assert r.status_code == 422
+        assert "self-loop" in r.json()["detail"].lower()
+
+    def test_reject_duplicate_node_names(self, client):
+        """PUT with duplicate node names returns 422."""
+        r = client.put("/api/config/workflows/dup-nodes", json={
+            "yaml_content": "name: test\nnodes:\n  - name: a\n  - name: a\nedges: []",
+        })
+        assert r.status_code == 422
+
 
 class TestAgentConfig:
     """Integration tests for Agent config management."""

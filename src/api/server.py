@@ -86,7 +86,7 @@ def create_app(db_path: str | None = None, state_db_path: str | None = None, con
     app.include_router(files_router)
     app.include_router(workflows_router)
     app.include_router(dag_router)
-    app.include_router(config_router)
+    app.include_router(config_router, prefix="/api")
 
     # Serve SPA static files
     if os.path.isdir(_static_dir):

@@ -202,6 +202,22 @@ class ConfigStore:
         if "edges" not in parsed:
             raise ValueError("YAML must contain 'edges' field")
 
+        # Validate nodes-edges consistency
+        node_names = {n["name"] for n in parsed["nodes"] if isinstance(n, dict) and "name" in n}
+        if len(node_names) != len(parsed["nodes"]):
+            raise ValueError("Duplicate node names found")
+        for edge in parsed.get("edges", []):
+            if not isinstance(edge, dict):
+                raise ValueError("Each edge must be a mapping")
+            if "from" not in edge or "to" not in edge:
+                raise ValueError("Each edge must have 'from' and 'to' fields")
+            if edge["from"] not in node_names:
+                raise ValueError(f"Edge references unknown node: {edge['from']}")
+            if edge["to"] not in node_names:
+                raise ValueError(f"Edge references unknown node: {edge['to']}")
+            if edge["from"] == edge["to"]:
+                raise ValueError(f"Self-loop edge: {edge['from']}")
+
         now = time.time()
         with self._write_lock:
             conn = self._get_conn()
@@ -215,6 +231,13 @@ class ConfigStore:
             conn.commit()
 
         return self.get_workflow(name)
+
+    def delete_workflow(self, name: str) -> bool:
+        with self._write_lock:
+            conn = self._get_conn()
+            cursor = conn.execute("DELETE FROM workflow_configs WHERE name = ?", (name,))
+            conn.commit()
+        return cursor.rowcount > 0
 
     # ── Agent Configs ──
 
