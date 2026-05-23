@@ -2,6 +2,7 @@ import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import ExecutionPage from './pages/ExecutionPage'
 import ConfigPage from './pages/ConfigPage'
+import ObservabilityPage from './pages/ObservabilityPage'
 
 export default function App() {
   const location = useLocation()
@@ -36,6 +37,14 @@ export default function App() {
             >
               Config
             </Link>
+            <Link
+              to="/observability"
+              className={`text-xs transition-colors px-2 py-1.5 rounded-md hover:bg-bg-sub ${
+                location.pathname === '/observability' ? 'text-accent' : 'text-text-muted hover:text-text'
+              }`}
+            >
+              Observability
+            </Link>
           </nav>
         </div>
       </header>
@@ -46,6 +55,7 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/executions/:threadId" element={<ExecutionPage />} />
           <Route path="/config" element={<ConfigPage />} />
+          <Route path="/observability" element={<ObservabilityPage />} />
         </Routes>
       </main>
     </div>
