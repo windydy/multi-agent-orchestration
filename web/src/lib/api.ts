@@ -1,4 +1,4 @@
-import type { OverviewStats, ExecutionListResponse } from '../types'
+import type { OverviewStats, ExecutionListResponse, DAGResponse } from '../types'
 
 const API_BASE = '/api'
 
@@ -29,7 +29,7 @@ export async function fetchExecution(threadId: string) {
   return res.json()
 }
 
-export async function fetchDAG(threadId: string) {
+export async function fetchDAG(threadId: string): Promise<DAGResponse> {
   const res = await fetch(`/api/executions/${threadId}/dag`)
   if (!res.ok) throw new Error(await res.text())
   return res.json()
