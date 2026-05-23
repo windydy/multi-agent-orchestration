@@ -14,7 +14,9 @@ from .routes.execution_read import set_event_log as set_read_event_log
 from .routes.executions import router as executions_router, set_execution_manager, set_event_log as set_exec_event_log
 from .routes.files import router as files_router, set_project_root
 from .routes.workflows import router as workflows_router
-from .routes.dag import set_event_log as set_dag_event_log
+from .routes.dag import router as dag_router, set_event_log as set_dag_event_log
+from .routes.config import router as config_router, set_config_store
+from .services.config_store import ConfigStore
 
 _event_log: EventLog | None = None
 _execution_manager: ExecutionManager | None = None
@@ -22,7 +24,7 @@ _project_root: str = ""
 _static_dir: str = ""
 
 
-def create_app(db_path: str | None = None, state_db_path: str | None = None) -> FastAPI:
+def create_app(db_path: str | None = None, state_db_path: str | None = None, config_db_path: str | None = None) -> FastAPI:
     """Create the FastAPI application."""
     global _event_log, _execution_manager, _project_root, _static_dir
 
@@ -44,6 +46,12 @@ def create_app(db_path: str | None = None, state_db_path: str | None = None) -> 
         state_db_path = os.path.join(_project_root, "checkpoints", "execution_state.db")
     _execution_manager = ExecutionManager(db_path=state_db_path)
     set_execution_manager(_execution_manager)
+
+    # Phase 4: Initialize ConfigStore
+    if config_db_path is None:
+        config_db_path = os.path.join(_project_root, "checkpoints", "config.db")
+    _config_store = ConfigStore(db_path=config_db_path)
+    set_config_store(_config_store)
 
     # P0-3: Set project root for file access validation
     set_project_root(_project_root)
@@ -77,6 +85,8 @@ def create_app(db_path: str | None = None, state_db_path: str | None = None) -> 
     app.include_router(executions_router)
     app.include_router(files_router)
     app.include_router(workflows_router)
+    app.include_router(dag_router)
+    app.include_router(config_router)
 
     # Serve SPA static files
     if os.path.isdir(_static_dir):

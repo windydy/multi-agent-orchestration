@@ -31,7 +31,6 @@ export interface DAGResponse {
 
 export interface ExecutionItem {
   thread_id: string
-  workflow_name: string
   status: string
   started_at: string
   ended_at: string | null
@@ -40,15 +39,10 @@ export interface ExecutionItem {
   completed_nodes: number
 }
 
-export interface ExecutionListResponse {
-  total: number
-  items: ExecutionItem[]
-}
-
 export interface NodeEvent {
   node: string
-  status: 'pending' | 'running' | 'success' | 'failed' | 'skipped'
-  started_at: string | null
+  status: string
+  started_at: string
   ended_at: string | null
   duration_ms: number | null
   output_summary: string | null
@@ -58,7 +52,6 @@ export interface NodeEvent {
 
 export interface ExecutionDetail {
   thread_id: string
-  workflow_name: string
   status: string
   started_at: string
   ended_at: string | null
@@ -67,4 +60,40 @@ export interface ExecutionDetail {
   total_cost: number | null
   total_tokens: number | null
   task_input: string | null
+}
+
+export interface ExecutionListResponse {
+  total: number
+  items: ExecutionItem[]
+}
+
+export interface WorkflowResponse {
+  name: string
+  description: string
+  yaml_content: string
+  created_at: number
+  updated_at: number
+}
+
+export interface AgentResponse {
+  id: string
+  name: string
+  description: string
+  capabilities: string[]
+  model: string
+  enabled: boolean
+  created_at: number
+  updated_at: number
+}
+
+export interface VerifierResponse {
+  id: string
+  name: string
+  condition: string
+  threshold: number
+  action: string
+  severity: string
+  enabled: boolean
+  created_at: number
+  updated_at: number
 }

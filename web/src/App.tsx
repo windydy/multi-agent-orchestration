@@ -1,8 +1,11 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import ExecutionPage from './pages/ExecutionPage'
+import ConfigPage from './pages/ConfigPage'
 
 export default function App() {
+  const location = useLocation()
+
   return (
     <div className="min-h-screen bg-bg">
       {/* Header */}
@@ -16,12 +19,24 @@ export default function App() {
             </div>
             <span className="font-semibold text-sm tracking-tight">Multi-Agent Dashboard</span>
           </div>
-          <button
-            onClick={() => window.location.reload()}
-            className="text-xs text-text-muted hover:text-text transition-colors px-3 py-1.5 rounded-md hover:bg-bg-sub"
-          >
-            ↻ Refresh
-          </button>
+          <nav className="flex items-center gap-4">
+            <Link
+              to="/"
+              className={`text-xs transition-colors px-2 py-1.5 rounded-md hover:bg-bg-sub ${
+                location.pathname === '/' ? 'text-accent' : 'text-text-muted hover:text-text'
+              }`}
+            >
+              Dashboard
+            </Link>
+            <Link
+              to="/config"
+              className={`text-xs transition-colors px-2 py-1.5 rounded-md hover:bg-bg-sub ${
+                location.pathname === '/config' ? 'text-accent' : 'text-text-muted hover:text-text'
+              }`}
+            >
+              Config
+            </Link>
+          </nav>
         </div>
       </header>
 
@@ -30,6 +45,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/executions/:threadId" element={<ExecutionPage />} />
+          <Route path="/config" element={<ConfigPage />} />
         </Routes>
       </main>
     </div>
