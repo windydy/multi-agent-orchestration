@@ -16,7 +16,9 @@ from .routes.files import router as files_router, set_project_root
 from .routes.workflows import router as workflows_router
 from .routes.dag import router as dag_router, set_event_log as set_dag_event_log
 from .routes.config import router as config_router, set_config_store
+from .routes.observability import router as observability_router, set_observability
 from .services.config_store import ConfigStore
+from .services.observability import ObservabilityStore
 
 _event_log: EventLog | None = None
 _execution_manager: ExecutionManager | None = None
@@ -24,7 +26,7 @@ _project_root: str = ""
 _static_dir: str = ""
 
 
-def create_app(db_path: str | None = None, state_db_path: str | None = None, config_db_path: str | None = None) -> FastAPI:
+def create_app(db_path: str | None = None, state_db_path: str | None = None, config_db_path: str | None = None, observability_db_path: str | None = None) -> FastAPI:
     """Create the FastAPI application."""
     global _event_log, _execution_manager, _project_root, _static_dir
 
@@ -52,6 +54,12 @@ def create_app(db_path: str | None = None, state_db_path: str | None = None, con
         config_db_path = os.path.join(_project_root, "checkpoints", "config.db")
     _config_store = ConfigStore(db_path=config_db_path)
     set_config_store(_config_store)
+
+    # Phase 5: Initialize ObservabilityStore
+    if observability_db_path is None:
+        observability_db_path = os.path.join(_project_root, "checkpoints", "observability.db")
+    _observability_store = ObservabilityStore(events_db_path=db_path, alerts_db_path=observability_db_path)
+    set_observability(_observability_store)
 
     # P0-3: Set project root for file access validation
     set_project_root(_project_root)
@@ -87,6 +95,7 @@ def create_app(db_path: str | None = None, state_db_path: str | None = None, con
     app.include_router(workflows_router)
     app.include_router(dag_router)
     app.include_router(config_router, prefix="/api")
+    app.include_router(observability_router, prefix="/api")
 
     # Serve SPA static files
     if os.path.isdir(_static_dir):
