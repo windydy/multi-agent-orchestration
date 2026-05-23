@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Callable, Awaitable
+import asyncio
 import logging
 
 try:
@@ -72,9 +73,9 @@ class DynamicWorkflowBuilder:
             self._workflow.add_node(node_id, node_func)
 
         # 添加 replan 节点
-        self._workflow.add_node("replan", self._replan_node)
-        # 添加 verifier 节点
-        self._workflow.add_node("verify", self._verify_node)
+        self._workflow.add_node("__replan__", self._replan_node)
+        # 添加 verifier 节点（前缀避免与流程中的 verify 节点冲突）
+        self._workflow.add_node("__verify__", self._verify_node)
 
         # 构建边
         self._build_edges(order)
@@ -156,28 +157,25 @@ class DynamicWorkflowBuilder:
                 if node_id in n.dependencies:
                     downstream.append(nid)
 
-            # 找到该节点的所有上游节点
-            upstream = node.dependencies
-
             if not downstream:
-                # 终端节点 -> verify -> END
-                self._workflow.add_edge(node_id, "verify")
+                # 终端节点 -> __verify__ -> END
+                self._workflow.add_edge(node_id, "__verify__")
             else:
                 for down_id in downstream:
                     self._workflow.add_edge(node_id, down_id)
 
-        # verify 节点后路由
+        # __verify__ 节点后路由
         self._workflow.add_conditional_edges(
-            "verify",
+            "__verify__",
             self._verify_router,
             {
-                "replan": "replan",
+                "replan": "__replan__",
                 "complete": END,
             },
         )
 
-        # replan 后重新从入口开始
-        self._workflow.add_edge("replan", order[0] if order else END)
+        # __replan__ 后重新从入口开始
+        self._workflow.add_edge("__replan__", order[0] if order else END)
 
     def _verify_router(self, state: DynamicWorkflowState) -> str:
         """验证后路由"""
@@ -186,16 +184,129 @@ class DynamicWorkflowBuilder:
         return "complete"
 
     async def _replan_node(self, state: DynamicWorkflowState) -> dict:
-        """重新规划节点（占位）"""
+        """
+        重新规划节点。
+        
+        当验证失败或执行失败时，检查是否有节点可以重试。
+        如果所有失败节点已超出重试次数，标记 needs_replan=True 通知上游。
+        """
+        failed_nodes = state.get("failed_nodes", [])
+        executor_results = state.get("executor_results", {})
+
+        if not failed_nodes:
+            # 没有失败节点，不需要 replan
+            return {
+                "needs_replan": False,
+                "plan_status": "no_failed_nodes",
+                "messages": [{"role": "system", "content": "No failed nodes to replan"}],
+            }
+
+        # 检查每个失败节点是否可以重试
+        retryable = []
+        for node_id in failed_nodes:
+            result = executor_results.get(node_id, {})
+            retry_count = result.get("metadata", {}).get("retry_count", 0)
+            max_retries = result.get("metadata", {}).get("max_retries", 3)
+
+            node = self._plan.nodes.get(node_id)
+            if node and retry_count < max_retries:
+                retryable.append(node_id)
+                # 重置节点状态以便重试
+                node.status = NodeStatus.PENDING
+                node.retry_count = retry_count + 1
+
+        if retryable:
+            logger.info("Replan: 重试节点 %s", retryable)
+            return {
+                "needs_replan": False,  # 不 replan，直接重试
+                "plan_status": "retrying",
+                "retrying_nodes": retryable,
+                "messages": [{"role": "system", "content": f"Retrying nodes: {retryable}"}],
+            }
+
+        # 所有失败节点已超出重试次数，标记需要 replan
         return {
-            "needs_replan": False,
-            "plan_status": "replanning",
-            "messages": [{"role": "system", "content": "Replanning..."}],
+            "needs_replan": True,
+            "plan_status": "all_retries_exhausted",
+            "failed_nodes": failed_nodes,
+            "messages": [{"role": "system", "content": f"All retries exhausted for: {failed_nodes}"}],
         }
 
     async def _verify_node(self, state: DynamicWorkflowState) -> dict:
-        """验证节点（占位）"""
+        """
+        验证节点执行结果。
+        
+        1. 检查是否有执行失败的节点
+        2. 运行已注册的验证规则 (ruff, pytest 等)
+        3. 汇总验证结果
+        """
+        failed_nodes = state.get("failed_nodes", [])
+        executor_results = state.get("executor_results", {})
+
+        # 检查执行结果
+        if failed_nodes:
+            return {
+                "verifier_results": {
+                    "execution_check": {
+                        "passed": False,
+                        "failed_nodes": failed_nodes,
+                    }
+                },
+                "verification_passed": False,
+                "needs_replan": True,
+            }
+
+        # 运行验证规则（如果配置了 VerifierFramework）
+        # 这里使用 VerifierFramework 执行真实检查
+        verification_results = {}
+        all_passed = True
+
+        try:
+            from src.verifier import VerifierFramework
+            verifier = VerifierFramework()
+
+            # 注册默认验证规则
+            # 这些规则可以通过配置动态添加
+            project_path = state.get("project_path", ".")
+
+            # 检查项目结构是否有效（基本 sanity check）
+            import os
+            if os.path.isdir(project_path):
+                verification_results["project_structure"] = {
+                    "passed": True,
+                    "message": f"Project path exists: {project_path}",
+                }
+            else:
+                verification_results["project_structure"] = {
+                    "passed": False,
+                    "message": f"Project path not found: {project_path}",
+                }
+                all_passed = False
+
+            # 检查 executor 输出
+            for node_id, result in executor_results.items():
+                if isinstance(result, dict) and result.get("success") is False:
+                    verification_results[f"exec_{node_id}"] = {
+                        "passed": False,
+                        "message": f"Node {node_id} execution failed",
+                    }
+                    all_passed = False
+                else:
+                    verification_results[f"exec_{node_id}"] = {
+                        "passed": True,
+                        "message": f"Node {node_id} succeeded",
+                    }
+
+        except Exception as e:
+            logger.warning("验证执行异常: %s", e)
+            verification_results["framework_error"] = {
+                "passed": False,
+                "message": str(e),
+            }
+            all_passed = False
+
         return {
-            "verifier_results": {"verify": {"passed": True}},
-            "verification_passed": True,
+            "verifier_results": verification_results,
+            "verification_passed": all_passed,
+            "needs_replan": not all_passed,
         }

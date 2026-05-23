@@ -11,6 +11,7 @@ from src.config.schema import WorkflowConfig, FlowNode, FlowEdge
 from src.plan.graph import PlanGraph, PlanNode, NodeType, ExecutorCapability
 from src.executors.registry import ExecutorRegistry
 from src.workflows.dynamic_builder import DynamicWorkflowBuilder
+from src.agents.loader import AgentLoader
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ TYPE_TO_CAPABILITY = {
     "security": ExecutorCapability.SECURITY_AUDIT,
     "data": ExecutorCapability.DATA_ENGINEERING,
     "product": ExecutorCapability.PRODUCT_MANAGEMENT,
+    "planner": ExecutorCapability.GENERIC,
 }
 
 
@@ -46,6 +48,7 @@ class ConfigurableWorkflowBuilder:
         self.config = config.merge_executor_defaults()
         self._executor_registry = ExecutorRegistry()
         self._dynamic_builder = DynamicWorkflowBuilder()
+        self._agent_loader = AgentLoader()
         self._app: Any = None
     
     def build(self) -> Any:
@@ -76,26 +79,126 @@ class ConfigurableWorkflowBuilder:
     def _create_executor(self, name: str, cfg) -> Any:
         """创建 Executor 实例
         
-        这里创建 AgentExecutor 适配器，将 Phase 1-3 的 Agent 包装为 Executor。
-        由于我们没有实际的 API key，这里创建一个 mock executor。
+        优先从 agents/{name}.md 加载 Agent 定义，
+        如果找不到则使用内置的 system_prompts 映射。
         """
-        from src.executors.base import BaseExecutor, ExecutorStatus
-        from src.plan.graph import PlanNode as PN
+        from src.executors.agent_adapter import AgentExecutor
+        from src.core.agent import AgentConfig, AgentRole
+        from src.claude.wrapper import ClaudeAgentWrapper, ClaudeSDKConfig, ClaudeToolType
+        from src.claude.hooks import create_hooks
         
-        class MockExecutor(BaseExecutor):
-            async def execute(self, node: PN, context: dict) -> dict:
-                return {
-                    "output": f"Executed by {name}",
-                    "success": True,
-                    "metadata": {"model": cfg.model or "qwen3.6-plus"},
-                }
+        # 工具名称映射
+        TOOL_MAP = {
+            "read": ClaudeToolType.READ_FILE,
+            "read_file": ClaudeToolType.READ_FILE,
+            "write": ClaudeToolType.WRITE_FILE,
+            "write_file": ClaudeToolType.WRITE_FILE,
+            "edit": ClaudeToolType.EDIT_FILE,
+            "edit_file": ClaudeToolType.EDIT_FILE,
+            "bash": ClaudeToolType.BASH,
+            "search": ClaudeToolType.SEARCH,
+        }
         
+        # 尝试从 agents/{name}.md 加载
+        agent_def = None
+        loader = self._agent_loader
+        available = loader.list_agents()
+        
+        # 名称映射: yaml name → agent file name
+        name_mapping = {
+            "planner": "planner",
+            "requirements": "requirements-analyst",
+            "designer": "designer",
+            "developer": "developer",
+            "reviewer": "reviewer",
+            "tester": "tester",
+            "fixer": "fixer",
+            "documentation": "documentation",
+            "architect": "architect",
+            "devops": "devops",
+            "security": "security",
+            "data": "data",
+            "product": "product-manager",
+        }
+        
+        agent_file_name = name_mapping.get(name, name)
+        if agent_file_name in available:
+            agent_def = loader.load(agent_file_name)
+        
+        if agent_def:
+            sys_prompt = agent_def.system_prompt
+            model = cfg.model if cfg.model is not None else agent_def.model
+            tools_list = cfg.tools if cfg.tools is not None else agent_def.tools
+            max_iterations = cfg.max_iterations if cfg.max_iterations is not None else agent_def.max_iterations
+            timeout = cfg.timeout if cfg.timeout is not None else agent_def.timeout
+            temperature = cfg.temperature if cfg.temperature is not None else agent_def.temperature
+        else:
+            # 降级到内置映射
+            sys_prompt = self._get_builtin_prompt(name)
+            model = cfg.model or "qwen3.6-plus"
+            tools_list = cfg.tools or ["read_file", "bash"]
+            max_iterations = cfg.max_iterations or 15
+            timeout = cfg.timeout or 300
+            temperature = cfg.temperature if cfg.temperature is not None else 0.3
+        
+        tools = [TOOL_MAP.get(t, ClaudeToolType.READ_FILE) for t in tools_list if t in TOOL_MAP or t in ["read", "read_file", "write", "write_file", "edit", "edit_file", "bash", "search"]]
+        if not tools:
+            tools = [ClaudeToolType.READ_FILE, ClaudeToolType.BASH]
+        
+        # 创建 AgentConfig
+        agent_config = AgentConfig(
+            name=name,
+            role=AgentRole.WORKER,
+            description=agent_def.description if agent_def else f"{name} executor",
+            model=model,
+            tools=[t.value for t in tools],
+            max_iterations=max_iterations,
+            timeout=timeout,
+            temperature=temperature,
+            system_prompt=sys_prompt,
+        )
+        
+        # 创建 ClaudeSDKConfig
+        claude_config = ClaudeSDKConfig(
+            model=model,
+            max_tokens=8192,
+            temperature=temperature,
+            tools=tools,
+            system_prompt=sys_prompt,
+        )
+        
+        # 创建真实 Agent
+        hooks = create_hooks(safety=True, logging=True, cost_control=True)
+        agent = ClaudeAgentWrapper(agent_config, claude_config, hooks)
+        
+        # 包装为 AgentExecutor
         caps = self._infer_capabilities(name, cfg)
-        return MockExecutor(
+        return AgentExecutor(
             executor_id=f"{name}-executor",
             name=name,
+            agent=agent,
             capabilities=caps,
         )
+    
+    @staticmethod
+    def _get_builtin_prompt(name: str) -> str:
+        """内置 system prompt 映射（降级路径）"""
+        prompts = {
+            "planner": "你是任务规划专家，负责将复杂任务分解为可执行的 DAG 计划。",
+            "requirements": "你是需求分析师，负责理解用户需求并提取功能点。",
+            "designer": "你是系统架构师，负责技术设计和架构规划。",
+            "developer": "你是开发工程师，负责实现代码和编写测试。",
+            "reviewer": "你是代码审查专家，负责审查代码质量和安全性。",
+            "tester": "你是测试工程师，负责编写和执行自动化测试。",
+            "fixer": "你是 Bug 修复专家，负责定位和修复缺陷。",
+            "documentation": "你是技术文档工程师，负责编写文档。",
+            "architect": "你是架构师，负责技术选型和架构设计。",
+            "devops": "你是 DevOps 工程师，负责 CI/CD 和部署。",
+            "security": "你是安全专家，负责安全审计和漏洞扫描。",
+            "data": "你是数据工程师，负责数据分析和处理。",
+            "product": "你是产品经理，负责需求分析和优先级排序。",
+        }
+        return prompts.get(name, f"你是 {name} 角色，负责执行任务。")
     
     def _infer_capabilities(self, name: str, cfg) -> list[ExecutorCapability]:
         """推断 Executor 能力声明

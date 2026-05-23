@@ -1,3 +1,1 @@
-"""
-Tests模块
-"""
+"""Tests for multi-agent orchestration."""

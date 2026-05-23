@@ -1,0 +1,177 @@
+# Multi-Agent Orchestration — Phase 8 自举开发工作流
+# 用系统自身开发 Phase 8 的高级特性
+
+$schema: "1.0"
+version: "1.0"
+name: "phase8-bootstrap"
+display_name: "Phase 8 自举开发"
+description: "用 P/E/V 架构自举开发 Phase 8 子功能"
+
+# Planner 配置 — MiniMax-M2.5 负责任务分解和方案生成
+planner:
+  enabled: true
+  model: "MiniMax-M2.5"
+  max_plan_depth: 5
+  allow_parallel: true
+  auto_replan: true
+
+# Executor 默认值
+defaults:
+  model: "qwen3.6-plus"
+  max_iterations: 20
+  timeout: 600
+  retry: 2
+  tools: ["read_file", "write_file", "edit_file", "bash", "search"]
+
+# 各角色 Executor 配置
+executors:
+  planner:
+    model: "MiniMax-M2.5"
+    max_iterations: 10
+    timeout: 300
+    tools: ["read_file", "write_file", "search"]
+    system_prompt: "你是任务规划专家。阅读 Phase 8 设计文档，分析需求，生成详细技术方案（Markdown），包含类设计、文件结构、测试策略和实施步骤。"
+  
+  developer:
+    model: "qwen3.6-plus"
+    max_iterations: 25
+    timeout: 900
+    tools: ["read_file", "write_file", "edit_file", "bash", "search"]
+    parallel_instances: 2
+    system_prompt: "你是 Python 开发工程师。根据技术方案编写代码，遵循 TDD：先写测试，再写实现。代码要完整、可运行、有类型注解。"
+  
+  reviewer:
+    model: "kimi-k2.5"
+    max_iterations: 10
+    timeout: 300
+    tools: ["read_file", "search"]
+    system_prompt: "你是代码审查专家。审查代码质量、安全性、规范性。输出审查报告，指出问题并给出修改建议。"
+  
+  tester:
+    model: "qwen3.6-plus"
+    max_iterations: 15
+    timeout: 300
+    tools: ["read_file", "write_file", "bash", "search"]
+    system_prompt: "你是测试工程师。编写和执行单元测试，验证代码功能。运行 pytest 确保所有测试通过。"
+
+# 验证规则
+verifiers:
+  code_quality:
+    enabled: true
+    rules:
+      - name: "pytest"
+        check: "pytest tests/ -x -q"
+        severity: "critical"
+        timeout: 120
+      - name: "syntax_check"
+        check: "python -m py_compile"
+        severity: "critical"
+        timeout: 30
+
+# 自举开发流程 — 5 步完整闭环
+# 注意: depends_on 定义 DAG 主流程
+# 回退路径（条件边）由 LangGraph 的 verify/replan 机制处理，不在 edges 中定义
+flow_template:
+  entry_point: "plan"
+  nodes:
+    - id: "plan"
+      type: "planner"
+      label: "生成技术方案"
+      timeout: 300
+      retry: 2
+      depends_on: []
+      parallel: false
+      verifiers: []
+    
+    - id: "plan_review"
+      type: "reviewer"
+      label: "方案审查"
+      timeout: 300
+      retry: 1
+      depends_on: ["plan"]
+      parallel: false
+      verifiers: []
+    
+    - id: "test_write"
+      type: "tester"
+      label: "编写测试用例 (TDD)"
+      timeout: 600
+      retry: 2
+      depends_on: ["plan_review"]
+      parallel: false
+      verifiers: ["code_quality"]
+    
+    - id: "develop"
+      type: "developer"
+      label: "实现代码"
+      timeout: 900
+      retry: 2
+      depends_on: ["test_write"]
+      parallel: false
+      verifiers: []
+    
+    - id: "code_review"
+      type: "reviewer"
+      label: "代码审查"
+      timeout: 300
+      retry: 1
+      depends_on: ["develop"]
+      parallel: false
+      verifiers: []
+    
+    - id: "verify"
+      type: "tester"
+      label: "运行测试验证"
+      timeout: 300
+      retry: 2
+      depends_on: ["code_review"]
+      parallel: false
+      verifiers: ["code_quality"]
+
+  edges:
+    # 主流程 DAG（无环）
+    - from: "plan"
+      to: "plan_review"
+      condition: null
+    
+    - from: "plan_review"
+      to: "test_write"
+      condition: null
+    
+    - from: "test_write"
+      to: "develop"
+      condition: null
+    
+    - from: "develop"
+      to: "code_review"
+      condition: null
+    
+    - from: "code_review"
+      to: "verify"
+      condition: null
+    
+    # 终端节点 -> verify -> END (由 DynamicWorkflowBuilder 自动添加)
+
+# 成本控制
+cost_control:
+  warning_threshold: 10.0
+  limit_threshold: 20.0
+  stop_threshold: 50.0
+
+# 检查点
+checkpoint:
+  enabled: true
+  path: "./checkpoints/${WORKFLOW_NAME:-phase8-bootstrap}.db"
+  interval: 30
+
+# 日志
+logging:
+  level: "INFO"
+  format: "structured"
+  output:
+    - type: "console"
+
+# 变量
+vars:
+  project_root: "."
+  phase8_design_doc: "docs/design/phase8-advanced-features.md"

@@ -246,6 +246,34 @@ def merge_state(old: WorkflowState, new: dict) -> WorkflowState:
 
 
 # ============================================================
+# Reducer 函数（具名函数替代 lambda，支持序列化）
+# ============================================================
+
+def _merge_dicts(a: dict, b: dict) -> dict:
+    return {**a, **b}
+
+def _last_value(a, b):
+    return b
+
+def _take_first_or(a, b):
+    return b or a
+
+def _take_first_or_rev(a, b):
+    return a or b
+
+def _bool_and(a: bool, b: bool) -> bool:
+    return a and b
+
+def _bool_or(a: bool, b: bool) -> bool:
+    return a or b
+
+def _sum_int(a: int, b: int) -> int:
+    return a + b
+
+def _sum_float(a: float, b: float) -> float:
+    return a + b
+
+# ============================================================
 # Phase 4: DynamicWorkflowState — 动态工作流状态
 # ============================================================
 
@@ -254,53 +282,54 @@ class DynamicWorkflowState(TypedDict):
     动态工作流全局状态。
 
     扩展原有的 WorkflowState，新增 PlanGraph 和 P/E/V 相关字段。
+    注意：此版本的字段使用 Annotated reducer，仅在并行执行时生效。
     """
 
     # === 继承自 WorkflowState 的字段 ===
-    task: str
-    project_path: str
+    task: Annotated[str, _take_first_or]
+    project_path: Annotated[str, _take_first_or]
     messages: Annotated[Sequence[dict], operator.add]
-    current_stage: str
-    iteration_count: int
-    total_cost: float
-    start_time: str
-    end_time: str
+    current_stage: Annotated[str, _take_first_or]
+    iteration_count: Annotated[int, _sum_int]
+    total_cost: Annotated[float, _sum_float]
+    start_time: Annotated[str, _take_first_or_rev]
+    end_time: Annotated[str, _take_first_or]
 
     # === PlanGraph 相关 ===
-    plan_graph_id: str
+    plan_graph_id: Annotated[Optional[str], _take_first_or]
     """当前执行计划的 ID"""
 
-    plan_graph_json: str
+    plan_graph_json: Annotated[Optional[str], _take_first_or]
     """PlanGraph 的 JSON 序列化"""
 
-    plan_status: str
+    plan_status: Annotated[Optional[str], _take_first_or]
     """计划状态: draft / executing / completed / failed / replanning"""
 
     # === Executor 结果 ===
-    executor_results: Annotated[dict, lambda a, b: {**a, **b}]
+    executor_results: Annotated[dict, _merge_dicts]
     """所有节点的执行结果映射: {node_id: result}"""
 
-    current_node: str
-    """当前正在执行的节点 ID"""
+    current_node: Annotated[Optional[str], _last_value]
+    """当前正在执行的节点 ID（取最后一个值）"""
 
     # === Verifier 结果 ===
-    verifier_results: Annotated[dict, lambda a, b: {**a, **b}]
+    verifier_results: Annotated[dict, _merge_dicts]
     """所有节点的验证结果映射: {node_id: result}"""
 
-    verification_passed: bool
-    """最近一次验证是否通过"""
+    verification_passed: Annotated[bool, _bool_and]
+    """最近一次验证是否通过（AND 聚合）"""
 
     # === 控制流 ===
-    needs_replan: bool
-    """是否需要重新规划"""
+    needs_replan: Annotated[bool, _bool_or]
+    """是否需要重新规划（OR 聚合）"""
 
-    replan_reason: str
+    replan_reason: Annotated[Optional[str], _take_first_or]
     """重新规划的原因"""
 
-    completed_nodes: Annotated[list, operator.add]
+    completed_nodes: Annotated[list[str], operator.add]
     """已完成节点 ID 列表"""
 
-    failed_nodes: Annotated[list, operator.add]
+    failed_nodes: Annotated[list[str], operator.add]
     """失败节点 ID 列表"""
 
 

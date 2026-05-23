@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist runtime data
+      - ./checkpoints:/app/checkpoints
+      - ./memory:/app/memory
+      - ./logs:/app/logs
+    environment:
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - WORKFLOW_CONFIG_DIR=/app/config/workflows
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: Development mode with hot reload
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+      - ./checkpoints:/app/checkpoints
+      - ./memory:/app/memory
+    environment:
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+    profiles:
+      - dev

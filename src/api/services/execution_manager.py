@@ -7,7 +7,11 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from src.api.ws import WebSocketManager
+    from src.agents.summarizer import SummarizerAgent
 
 
 @dataclass
@@ -35,12 +39,19 @@ class ExecutionManager:
     - P0-4: asyncio.Lock for all shared state mutations
     """
 
-    def __init__(self, db_path: str = "./checkpoints/execution_state.db"):
+    def __init__(
+        self,
+        db_path: str = "./checkpoints/execution_state.db",
+        ws_manager: Optional["WebSocketManager"] = None,
+        summarizer: Optional["SummarizerAgent"] = None,
+    ):
         self._executions: dict[str, ExecutionHandle] = {}
         self._lock = asyncio.Lock()  # P0-4: Protects all shared state mutations
         self._db_path = db_path
         self._write_lock = threading.Lock()  # For SQLite write serialization
         self._local = threading.local()
+        self._ws_manager = ws_manager
+        self._summarizer = summarizer
         self._ensure_db()
 
     def _get_conn(self) -> sqlite3.Connection:
@@ -108,6 +119,33 @@ class ExecutionManager:
 
         return recovered_interrupted
 
+    async def _broadcast_event(self, thread_id: str, status: str, data: dict) -> None:
+        """Broadcast execution status update via WebSocket.
+
+        Args:
+            thread_id: The execution thread ID
+            status: The new status
+            data: Additional event data
+        """
+        if self._ws_manager is None:
+            return
+
+        message = {
+            "type": "execution_update",
+            "task_id": thread_id,
+            "status": status,
+            "data": data,
+        }
+
+        try:
+            await self._ws_manager.broadcast(thread_id, message)
+        except Exception as e:
+            # Broadcast failure should not affect execution state
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to broadcast WebSocket event for %s: %s", thread_id, e
+            )
+
     def _persist(self, handle: ExecutionHandle) -> None:
         """P0-2: Persist execution state to SQLite on every state change."""
         import json
@@ -161,6 +199,15 @@ class ExecutionManager:
             self._executions[thread_id] = handle
             self._persist(handle)
 
+        # Broadcast WebSocket event after releasing lock
+        await self._broadcast_event(thread_id, "running", {
+            "task": task,
+            "workflow": workflow,
+            "project_path": project_path,
+            "model_config": model_config,
+            "started_at": handle.started_at,
+        })
+
         return handle
 
     async def cancel_execution(self, thread_id: str) -> bool:
@@ -185,7 +232,13 @@ class ExecutionManager:
                 handle.task_handle.cancel()
 
             self._persist(handle)
-            return True
+
+        # Broadcast WebSocket event after releasing lock
+        await self._broadcast_event(thread_id, "cancelled", {
+            "task": handle.task,
+            "workflow": handle.workflow,
+        })
+        return True
 
     async def pause_execution(self, thread_id: str) -> bool:
         """P0-4: Pause an execution with lock-protected state mutation."""
@@ -199,7 +252,13 @@ class ExecutionManager:
                 handle.pause_event.clear()
 
             self._persist(handle)
-            return True
+
+        # Broadcast WebSocket event after releasing lock
+        await self._broadcast_event(thread_id, "paused", {
+            "task": handle.task,
+            "workflow": handle.workflow,
+        })
+        return True
 
     async def resume_execution(self, thread_id: str) -> bool:
         """P0-4: Resume a paused execution with lock-protected state mutation."""
@@ -213,7 +272,13 @@ class ExecutionManager:
                 handle.pause_event.set()
 
             self._persist(handle)
-            return True
+
+        # Broadcast WebSocket event after releasing lock
+        await self._broadcast_event(thread_id, "running", {
+            "task": handle.task,
+            "workflow": handle.workflow,
+        })
+        return True
 
     async def bind_task(self, thread_id: str, task: asyncio.Task) -> bool:
         """P0-1: Bind the LangGraph asyncio.Task to an existing ExecutionHandle.
@@ -238,7 +303,58 @@ class ExecutionManager:
 
             handle.status = status
             self._persist(handle)
-            return True
+
+        # Broadcast WebSocket event after releasing lock
+        await self._broadcast_event(thread_id, status, {
+            "task": handle.task,
+            "workflow": handle.workflow,
+        })
+
+        # Phase 8: 自动调用总结 Agent
+        if self._summarizer:
+            await self._run_summarizer(handle, status)
+
+        return True
+
+    async def _run_summarizer(self, handle: ExecutionHandle, status: str) -> None:
+        """异步运行总结 Agent，不阻塞主流程"""
+        try:
+            # 从 EventLog 获取事件
+            from ..services.event_log import EventLog
+
+            # 构建模拟数据用于总结（实际场景中从 LangGraph state 获取）
+            final_state = {
+                "current_stage": status,
+                "total_cost": 0.0,
+                "iteration_count": 0,
+            }
+            events = []
+            node_outputs = {}
+
+            summary = await self._summarizer.summarize(
+                execution_id=handle.thread_id,
+                task=handle.task,
+                workflow_name=handle.workflow,
+                final_state=final_state,
+                events=events,
+                node_outputs=node_outputs,
+                project_id=handle.project_path or "default",
+            )
+
+            import logging
+            logging.getLogger(__name__).info(
+                "Summarizer completed for %s: quality=%.1f, issues=%d, lessons=%d",
+                handle.thread_id,
+                summary.quality_score,
+                len(summary.issues),
+                len(summary.lessons_learned),
+            )
+        except Exception as e:
+            # 总结失败不应影响执行结果
+            import logging
+            logging.getLogger(__name__).warning(
+                "Summarizer failed for %s: %s", handle.thread_id, e
+            )
 
     async def get_execution(self, thread_id: str) -> Optional[ExecutionHandle]:
         """Get execution handle by thread_id."""

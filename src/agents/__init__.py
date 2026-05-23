@@ -18,6 +18,9 @@ from .data import DataAgent
 from .architect import ArchitectAgent
 from .product_manager import ProductManagerAgent
 
+# Phase 8: 总结 Agent
+from .summarizer import SummarizerAgent, create_summarizer
+
 __all__ = [
     "RequirementsAgent",
     "DesignerAgent",
@@ -37,4 +40,7 @@ __all__ = [
     "DataAgent",
     "ArchitectAgent",
     "ProductManagerAgent",
+    # Phase 8
+    "SummarizerAgent",
+    "create_summarizer",
 ]

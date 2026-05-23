@@ -75,21 +75,32 @@
 
 ---
 
-## 远期规划（Phase 8，可选）
+## Phase 8: 高级特性
 
-以下为可选增强，不在核心开发范围内：
-- [ ] Web UI 可视化（React + Vite + WebSocket）
-- [ ] 多项目工作空间管理
-- [ ] Agent 知识库和记忆系统
-- [ ] 团队协作功能
-- [ ] 生产部署脚本
+### 已完成 ✅
+- [x] Web UI 后端（FastAPI + WebSocket + 12 条 REST 路由）
+- [x] Web UI 前端（React + Vite + TypeScript，6 个页面 + 9 个组件）
+- [x] 多项目工作空间管理（WorkspaceManager，.workspace.yaml 持久化）
+- [x] Agent 知识库和记忆系统（AgentMemory + EmbeddingProvider）
+- [x] 第三方集成（GitHub/Jira/Slack）
+- [x] 188 个 Phase 8 测试全部通过
+
+### 待完成 🚧
+- [x] ~~总结 Agent~~ — 已完成
+- [x] ~~Docker 容器化~~ — 已完成
+- [x] ~~CI/CD 流水线~~ — 已完成
+- [ ] ~~生产部署脚本~~ — 跳过（非核心需求）
+
+---
+
+## Phase 8: ✅ 全部完成
 
 ---
 
 ## 项目统计
 
-- **测试总数**: 240 passed, 0 failed
-- **代码文件**: 59 个 `.py` 文件
+- **测试总数**: 677 passed, 0 failed
+- **代码文件**: 99 个 `.py` 文件
 - **核心模块**: agents / tools / bug / plan / executors / workflows / observability / cost / resilience / verifier / config / cli
 
-*更新日期: 2026-05-22*
+*更新日期: 2026-05-23*

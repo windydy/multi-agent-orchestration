@@ -97,3 +97,57 @@ export interface VerifierResponse {
   created_at: number
   updated_at: number
 }
+
+// ── Clarification Types (Phase 9) ──
+
+export type ClarificationRecommendation = 'skip' | 'conservative' | 'interactive'
+
+export interface ClarificationQuestion {
+  id: string
+  dimension: string
+  question: string
+  context: string
+  priority: 'high' | 'medium' | 'low'
+}
+
+export interface Assumption {
+  id: string
+  dimension: string
+  assumption: string
+  risk: 'high' | 'medium' | 'low'
+}
+
+export interface ClarificationState {
+  thread_id: string
+  status: 'pending' | 'analyzing' | 'questions_ready' | 'answered' | 'skipped' | 'conservative'
+  score: number | null
+  recommendation: ClarificationRecommendation | null
+  questions: ClarificationQuestion[]
+  assumptions: Assumption[]
+  answers: Record<string, string>
+  enriched_task: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateExecutionRequest {
+  task: string
+  workflow?: string
+  project_path?: string
+  models?: Record<string, string>
+  max_iterations?: number
+  clarification_mode?: 'auto' | 'conservative' | 'interactive'
+}
+
+export interface CreateExecutionResponse {
+  thread_id: string
+  status: string
+  started_at: number
+  workflow: string
+  clarification?: ClarificationState
+}
+
+export interface SubmitClarificationAnswersRequest {
+  thread_id: string
+  answers: Record<string, string>
+}

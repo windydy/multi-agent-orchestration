@@ -1,6 +1,7 @@
 """FastAPI server entry point for the Web UI Dashboard."""
 
 import os
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -9,16 +10,22 @@ from contextlib import asynccontextmanager
 
 from .services.event_log import EventLog
 from .services.execution_manager import ExecutionManager
+from .services.config_store import ConfigStore
+from .services.observability import ObservabilityStore
 from .routes import router
 from .routes.execution_read import set_event_log as set_read_event_log
-from .routes.executions import router as executions_router, set_execution_manager, set_event_log as set_exec_event_log
+from .routes.executions import (
+    router as executions_router,
+    set_execution_manager,
+    set_event_log as set_exec_event_log,
+    set_workflow_runner,
+)
 from .routes.files import router as files_router, set_project_root
 from .routes.workflows import router as workflows_router
 from .routes.dag import router as dag_router, set_event_log as set_dag_event_log
 from .routes.config import router as config_router, set_config_store
 from .routes.observability import router as observability_router, set_observability
-from .services.config_store import ConfigStore
-from .services.observability import ObservabilityStore
+from .routes.clarification import set_clarifier as set_route_clarifier
 
 _event_log: EventLog | None = None
 _execution_manager: ExecutionManager | None = None
@@ -26,7 +33,12 @@ _project_root: str = ""
 _static_dir: str = ""
 
 
-def create_app(db_path: str | None = None, state_db_path: str | None = None, config_db_path: str | None = None, observability_db_path: str | None = None) -> FastAPI:
+def create_app(
+    db_path: str | None = None,
+    state_db_path: str | None = None,
+    config_db_path: str | None = None,
+    observability_db_path: str | None = None,
+) -> FastAPI:
     """Create the FastAPI application."""
     global _event_log, _execution_manager, _project_root, _static_dir
 
@@ -46,7 +58,16 @@ def create_app(db_path: str | None = None, state_db_path: str | None = None, con
     # P0-2: Initialize ExecutionManager with SQLite persistence
     if state_db_path is None:
         state_db_path = os.path.join(_project_root, "checkpoints", "execution_state.db")
-    _execution_manager = ExecutionManager(db_path=state_db_path)
+
+    # Phase 8: 初始化总结 Agent 和知识库
+    from src.agents.summarizer import SummarizerAgent
+    from src.knowledge.memory import AgentMemory
+
+    memory_db = os.path.join(_project_root, "checkpoints", "agent_memory.db")
+    memory = AgentMemory(db_path=memory_db)
+    summarizer = SummarizerAgent(memory=memory, offline_mode=True)
+
+    _execution_manager = ExecutionManager(db_path=state_db_path, summarizer=summarizer)
     set_execution_manager(_execution_manager)
 
     # Phase 4: Initialize ConfigStore
@@ -60,6 +81,44 @@ def create_app(db_path: str | None = None, state_db_path: str | None = None, con
         observability_db_path = os.path.join(_project_root, "checkpoints", "observability.db")
     _observability_store = ObservabilityStore(events_db_path=db_path, alerts_db_path=observability_db_path)
     set_observability(_observability_store)
+
+    # ── Phase 4+: Initialize P/E/V components (Planner is the only path) ──
+    from src.workflows.runner import WorkflowRunner
+
+    planner = None
+    registry = None
+    dynamic_builder = None
+    clarifier = None
+    _logger = logging.getLogger(__name__)
+
+    try:
+        from src.plan.planner import PlannerAgent
+        from src.executors.registry import ExecutorRegistry
+        from src.workflows.dynamic_builder import DynamicWorkflowBuilder
+        from src.clarifier.agent import ClarifierAgent
+
+        planner = PlannerAgent()
+        registry = ExecutorRegistry()
+        dynamic_builder = DynamicWorkflowBuilder(registry=registry)
+        clarifier = ClarifierAgent()
+
+        _logger.info("[Phase 4] Planner/Executor/Verifier 组件初始化成功")
+        _logger.info("[Phase 9] ClarifierAgent 初始化成功")
+    except Exception as e:
+        _logger.error("[Phase 4] P/E/V 组件初始化失败，服务无法启动: %s", e)
+        raise
+
+    _workflow_runner = WorkflowRunner(
+        planner=planner,
+        dynamic_builder=dynamic_builder,
+        registry=registry,
+        clarifier=clarifier,
+    )
+    set_workflow_runner(_workflow_runner)
+
+    # Phase 9: Inject ClarifierAgent into routes
+    if clarifier is not None:
+        set_route_clarifier(clarifier)
 
     # P0-3: Set project root for file access validation
     set_project_root(_project_root)
@@ -96,6 +155,7 @@ def create_app(db_path: str | None = None, state_db_path: str | None = None, con
     app.include_router(dag_router)
     app.include_router(config_router, prefix="/api")
     app.include_router(observability_router, prefix="/api")
+    # clarification_router is now included via router (__init__.py)
 
     # Serve SPA static files
     if os.path.isdir(_static_dir):
@@ -109,9 +169,13 @@ def create_app(db_path: str | None = None, state_db_path: str | None = None, con
         async def serve_root():
             return FileResponse(os.path.join(_static_dir, "index.html"))
 
-        # Catch-all for SPA routing (paths without dots go to index.html)
+        # Catch-all for SPA routing — skip /api/ paths (must not return index.html for API requests)
         @app.get("/{full_path:path}")
         async def serve_spa(full_path: str):
+            if full_path.startswith("api/") or full_path.startswith("api\\"):
+                # Let API routers handle it; if no match, return 404 instead of index.html
+                from fastapi.responses import JSONResponse
+                return JSONResponse(status_code=404, content={"detail": "Not found"})
             file_path = os.path.join(_static_dir, full_path)
             if os.path.isfile(file_path):
                 return FileResponse(file_path)

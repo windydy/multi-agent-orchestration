@@ -1,5 +1,8 @@
 """Execution control API routes for Phase 2."""
 
+import asyncio
+import logging
+import time
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -12,6 +15,7 @@ router = APIRouter(prefix="/api", tags=["api"])
 # Module-level services (injected at startup)
 _execution_manager: Optional[ExecutionManager] = None
 _event_log: Optional[EventLog] = None
+_workflow_runner: Optional["WorkflowRunner"] = None  # Bridge to the actual LangGraph runner
 
 
 def set_execution_manager(em: ExecutionManager) -> None:
@@ -24,6 +28,12 @@ def set_event_log(log: EventLog) -> None:
     _event_log = log
 
 
+def set_workflow_runner(runner: "WorkflowRunner") -> None:
+    """Inject the WorkflowRunner instance so the API can trigger real execution."""
+    global _workflow_runner
+    _workflow_runner = runner
+
+
 def _get_em() -> ExecutionManager:
     if _execution_manager is None:
         raise HTTPException(500, "ExecutionManager not initialized")
@@ -34,6 +44,57 @@ def _get_log() -> EventLog:
     if _event_log is None:
         raise HTTPException(500, "EventLog not initialized")
     return _event_log
+
+
+# Deferred import avoids circular dependency
+def _get_runner() -> "WorkflowRunner":
+    if _workflow_runner is None:
+        raise HTTPException(500, "WorkflowRunner not initialized — cannot start execution")
+    return _workflow_runner
+
+
+async def _execute_background(thread_id: str, task: str, project_path: Optional[str]) -> None:
+    """Run the LangGraph workflow in the background, bridging API -> real execution.
+
+    This is the missing link: after create_execution persists the handle,
+    this coroutine actually invokes the workflow and reports completion.
+    """
+    em = _get_em()
+    log = _get_log()
+    runner = _get_runner()
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Wait for the handle's pause_event (running means it's set)
+        handle = await em.get_execution(thread_id)
+        if handle and handle.pause_event:
+            await handle.pause_event.wait()
+
+        log.log(thread_id, "workflow_start", time.time(),
+                data={"task": task, "project_path": project_path})
+
+        result = await runner.run(
+            task=task,
+            project_path=project_path or ".",
+            thread_id=thread_id,
+        )
+
+        if result.get("success"):
+            log.log(thread_id, "workflow_completed", time.time(),
+                    data={"summary": result.get("summary")})
+            await em.complete_execution(thread_id, status="completed")
+        else:
+            log.log(thread_id, "workflow_failed", time.time(),
+                    data={"error": result.get("error")})
+            await em.complete_execution(thread_id, status="failed")
+
+    except asyncio.CancelledError:
+        log.log(thread_id, "workflow_cancelled", time.time())
+        await em.complete_execution(thread_id, status="cancelled")
+    except Exception as e:
+        logger.exception("Background execution failed for %s", thread_id)
+        log.log(thread_id, "workflow_error", time.time(), data={"error": str(e)})
+        await em.complete_execution(thread_id, status="failed")
 
 
 # ── Request/Response models ──
@@ -76,12 +137,15 @@ class LogResponse(BaseModel):
 
 @router.post("/executions", response_model=CreateExecutionResponse, status_code=201)
 async def create_execution(req: CreateExecutionRequest):
-    """Create a new execution.
+    """Create a new execution and trigger the LangGraph workflow.
 
-    P0-1: Returns a thread_id that should be injected into the LangGraph
+    P0-1: Returns a thread_id that is injected into the LangGraph
     execution context via the `config` parameter.
 
     P0-4: Uses asyncio.Lock internally for state safety.
+
+    FIX: Now actually spawns the background task via asyncio.create_task
+    and binds it to the ExecutionHandle for cancellation support.
     """
     em = _get_em()
     log = _get_log()
@@ -92,9 +156,15 @@ async def create_execution(req: CreateExecutionRequest):
         model_config=req.models,
     )
     # Log the execution_started event so read endpoints can find it
-    import time
     log.log(handle.thread_id, "execution_started", time.time(),
             data={"task_input": req.task, "workflow": req.workflow})
+
+    # ── ARCHITECTURE FIX: spawn the actual workflow runner ──
+    background_task = asyncio.create_task(
+        _execute_background(handle.thread_id, req.task, req.project_path)
+    )
+    await em.bind_task(handle.thread_id, background_task)
+
     return CreateExecutionResponse(
         thread_id=handle.thread_id,
         status=handle.status,
