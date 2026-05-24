@@ -139,7 +139,7 @@ gitnexus and `rg`/`Read` are complementary. Benchmarked on this repo: gitnexus i
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **multi-agent-orchestration** (7998 symbols, 14364 relationships, 228 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **multi-agent-orchestration** (7753 symbols, 13822 relationships, 222 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -148,7 +148,7 @@ This project is indexed by GitNexus as **multi-agent-orchestration** (7998 symbo
 - **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
 - **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
 - **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- When exploring unfamiliar code, **start** with `gitnexus_query({query: "concept"})` to find execution flows. It returns process-grouped results ranked by relevance. Cross-check with `rg` when the target involves dynamic dispatch or you need exact line numbers — see "Code Navigation Strategy" above.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
 - When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
 
 ## Never Do
