@@ -9,3 +9,23 @@ checkpoints/
 web/node_modules/
 web/dist/
 *.tsbuildinfo
+
+# build artifacts
+build/
+dist/
+*.spec
+
+# runtime data
+logs/
+memory/
+.pipeline_thread_*.txt
+
+# local demo scratch
+demo_project/
+demo_simple/
+
+# claude local settings
+.claude/settings.local.json
+
+# self-dev generated reports
+docs/self-dev/reports/
