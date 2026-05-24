@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react'
-import { OverviewStats, ExecutionItem, ClarificationRecommendation } from '../types'
+import { useEffect, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { OverviewStats, ExecutionItem, ClarificationMode, CLARIFICATION_MODE_METADATA } from '../types'
 import { fetchOverview, fetchExecutions, createExecution } from '../lib/api'
 import StatsCards from '../components/StatsCards'
 import ExecutionTable from '../components/ExecutionTable'
-
-type ClarificationMode = 'auto' | 'conservative' | 'interactive'
 
 interface CreateTaskModalProps {
   isOpen: boolean
@@ -12,11 +11,43 @@ interface CreateTaskModalProps {
   onSubmit: (task: string, mode: ClarificationMode) => Promise<void>
 }
 
+/**
+ * CreateTaskModal - Modal for creating new tasks with clarification mode selection
+ * Implements the DRAFT state entry point from the state machine design (Section 8.1)
+ * 
+ * Features:
+ * - Task description input with validation
+ * - Clarification mode selection (auto, conservative, interactive)
+ * - Mode detail hints with workflow visualization
+ * - Keyboard shortcut (Escape to close)
+ * - Error handling and loading states
+ */
 function CreateTaskModal({ isOpen, onClose, onSubmit }: CreateTaskModalProps) {
   const [task, setTask] = useState('')
   const [mode, setMode] = useState<ClarificationMode>('auto')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Handle Escape key to close modal
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape' && isOpen) {
+      onClose()
+    }
+  }, [isOpen, onClose])
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
+
+  // Reset form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setTask('')
+      setMode('auto')
+      setError(null)
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -28,8 +59,7 @@ function CreateTaskModal({ isOpen, onClose, onSubmit }: CreateTaskModalProps) {
     setError(null)
     try {
       await onSubmit(task.trim(), mode)
-      setTask('')
-      setMode('auto')
+      // Form reset is handled by useEffect on isOpen change
       onClose()
     } catch (err: any) {
       setError(err.message || 'Failed to create execution')
@@ -38,33 +68,28 @@ function CreateTaskModal({ isOpen, onClose, onSubmit }: CreateTaskModalProps) {
     }
   }
 
-  const modeDescriptions: Record<ClarificationMode, { title: string; desc: string; icon: string }> = {
-    auto: {
-      title: 'Auto',
-      desc: 'System decides based on task clarity',
-      icon: '🤖',
-    },
-    conservative: {
-      title: 'Conservative',
-      desc: 'Fill assumptions for ambiguous tasks',
-      icon: '🛡️',
-    },
-    interactive: {
-      title: 'Interactive',
-      desc: 'Answer clarifying questions',
-      icon: '💬',
-    },
+  function handleBackdropClick(e: React.MouseEvent) {
+    if (e.target === e.currentTarget) {
+      onClose()
+    }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-bg border border-border rounded-xl shadow-2xl w-full max-w-lg mx-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      onClick={handleBackdropClick}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+    >
+      <div className="bg-bg border border-border rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="text-base font-semibold">Create New Task</h2>
+        <div className="flex items-center justify-between p-4 border-b border-border sticky top-0 bg-bg z-10">
+          <h2 id="modal-title" className="text-base font-semibold">Create New Task</h2>
           <button
             onClick={onClose}
             className="text-text-subtle hover:text-text transition-colors text-lg leading-none"
+            aria-label="Close modal"
           >
             ×
           </button>
@@ -74,16 +99,21 @@ function CreateTaskModal({ isOpen, onClose, onSubmit }: CreateTaskModalProps) {
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {/* Task Input */}
           <div>
-            <label className="block text-xs font-medium text-text-subtle uppercase tracking-wider mb-1.5">
+            <label htmlFor="task-input" className="block text-xs font-medium text-text-subtle uppercase tracking-wider mb-1.5">
               Task Description
             </label>
             <textarea
+              id="task-input"
               value={task}
               onChange={(e) => setTask(e.target.value)}
               placeholder="Describe what you want to accomplish..."
               className="w-full h-28 bg-bg-sub border border-border rounded-lg p-3 text-sm text-text placeholder:text-text-muted resize-none focus:outline-none focus:border-accent transition-colors"
               required
+              autoFocus
             />
+            <p className="text-[10px] text-text-muted mt-1">
+              Be specific about requirements, constraints, and acceptance criteria for better clarification.
+            </p>
           </div>
 
           {/* Mode Selection */}
@@ -92,8 +122,8 @@ function CreateTaskModal({ isOpen, onClose, onSubmit }: CreateTaskModalProps) {
               Clarification Mode
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {(Object.keys(modeDescriptions) as ClarificationMode[]).map((m) => {
-                const info = modeDescriptions[m]
+              {(Object.keys(CLARIFICATION_MODE_METADATA) as ClarificationMode[]).map((m) => {
+                const info = CLARIFICATION_MODE_METADATA[m]
                 const selected = mode === m
                 return (
                   <button
@@ -102,11 +132,13 @@ function CreateTaskModal({ isOpen, onClose, onSubmit }: CreateTaskModalProps) {
                     onClick={() => setMode(m)}
                     className={`p-3 rounded-lg border text-left transition-all ${
                       selected
-                        ? 'border-accent bg-accent/10'
+                        ? 'border-accent bg-accent/10 ring-1 ring-accent'
                         : 'border-border hover:border-text-subtle'
                     }`}
+                    aria-pressed={selected}
+                    title={info.detail}
                   >
-                    <div className="text-lg mb-1">{info.icon}</div>
+                    <div className="text-lg mb-1" role="img" aria-label={info.title}>{info.icon}</div>
                     <div className={`text-xs font-medium ${selected ? 'text-accent' : 'text-text'}`}>
                       {info.title}
                     </div>
@@ -117,17 +149,26 @@ function CreateTaskModal({ isOpen, onClose, onSubmit }: CreateTaskModalProps) {
                 )
               })}
             </div>
+            {/* Mode detail hint with workflow */}
+            <div className="mt-3 p-2 bg-bg-sub border border-border rounded-lg space-y-1">
+              <p className="text-[11px] text-text-muted italic">
+                {CLARIFICATION_MODE_METADATA[mode].detail}
+              </p>
+              <p className="text-[10px] text-text-subtle font-mono">
+                Workflow: {CLARIFICATION_MODE_METADATA[mode].workflow}
+              </p>
+            </div>
           </div>
 
           {/* Error */}
           {error && (
-            <div className="text-error text-xs bg-error/10 border border-error/20 rounded-lg p-2">
+            <div className="text-error text-xs bg-error/10 border border-error/20 rounded-lg p-2" role="alert">
               {error}
             </div>
           )}
 
           {/* Actions */}
-          <div className="flex gap-2 pt-2">
+          <div className="flex gap-2 pt-2 sticky bottom-0 bg-bg pt-3 border-t border-border">
             <button
               type="button"
               onClick={onClose}
@@ -150,6 +191,7 @@ function CreateTaskModal({ isOpen, onClose, onSubmit }: CreateTaskModalProps) {
 }
 
 export default function HomePage() {
+  const navigate = useNavigate()
   const [stats, setStats] = useState<OverviewStats | null>(null)
   const [items, setItems] = useState<ExecutionItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -175,7 +217,10 @@ export default function HomePage() {
     })
     // Reload to show new execution
     await load()
-    // Could navigate to execution page here
+    // Navigate to execution page for the new task
+    if (result?.thread_id) {
+      navigate(`/executions/${result.thread_id}`)
+    }
     return result
   }
 
@@ -204,7 +249,10 @@ export default function HomePage() {
     <div className="space-y-6">
       {/* Header with Create Button */}
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold tracking-tight">Dashboard</h1>
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-xs text-text-muted mt-0.5">Manage and monitor multi-agent executions</p>
+        </div>
         <button
           onClick={() => setModalOpen(true)}
           className="px-4 py-2 rounded-lg bg-accent text-bg text-sm font-medium hover:bg-accent/90 transition-colors"
