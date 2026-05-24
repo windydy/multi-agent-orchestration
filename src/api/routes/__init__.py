@@ -6,23 +6,18 @@ from src.api.services.event_log import EventLog
 
 from .clarification import (
     router as clarification_router,
-)
-from .clarification import (
     set_clarifier,
 )
 from .dag import router as dag_router
 from .dag import set_event_log as dag_set_event_log
+from .events_export import router as events_export_router
 from .execution_read import (
     router as execution_read_router,
+    set_event_log as read_set_event_log,
 )
-from .execution_read import set_event_log as read_set_event_log
 from .executions import (
     router as executions_router,
-)
-from .executions import (
     set_event_log as ctrl_set_event_log,
-)
-from .executions import (
     set_execution_manager,
     set_workflow_runner,
 )
@@ -47,3 +42,4 @@ router.include_router(dag_router)
 router.include_router(ws_router)
 router.include_router(clarification_router)
 router.include_router(memory_router)
+router.include_router(events_export_router)
