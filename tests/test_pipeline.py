@@ -1,5 +1,5 @@
 """
-完整流水线测试
+完整流水线测试 - Updated to match current WorkflowRunner API
 """
 
 import pytest
@@ -18,101 +18,68 @@ from src.workflows.states import create_initial_state, WorkflowStateManager
 class TestWorkflowRunner:
     """测试WorkflowRunner"""
     
-    @pytest.mark.asyncio
-    @patch("src.workflows.builder.LANGGRAPH_AVAILABLE", True)
-    async def test_runner_init(self):
-        """测试Runner初始化"""
-        runner = WorkflowRunner(api_key="test-key")
-        
-        assert runner.pipeline is not None
+    @pytest.fixture
+    def mock_planner(self):
+        """创建模拟的 PlannerAgent"""
+        planner = Mock()
+        planner.generate_plan = AsyncMock(return_value=Mock(
+            id="plan_123",
+            nodes={"node1": Mock()},
+            edges=[],
+            plan_type="development",
+        ))
+        planner.validate_plan = Mock(return_value=(True, []))
+        planner._default_plan = Mock(return_value=Mock(
+            id="plan_default",
+            nodes={"node1": Mock()},
+            edges=[],
+            plan_type="development",
+        ))
+        return planner
     
     @pytest.mark.asyncio
-    @patch("src.workflows.builder.LANGGRAPH_AVAILABLE", True)
-    async def test_run_without_interrupt(self):
-        """测试无中断运行"""
-        runner = WorkflowRunner(api_key="test-key")
+    async def test_runner_init(self, mock_planner):
+        """测试Runner初始化"""
+        runner = WorkflowRunner(planner=mock_planner)
         
-        # Mock app
-        runner.app = Mock()
-        runner.app.ainvoke = AsyncMock(return_value={
+        assert runner.planner is mock_planner
+        assert runner.clarifier is None
+    
+    @pytest.mark.asyncio
+    async def test_run_with_mock_builder(self, mock_planner):
+        """测试使用模拟 builder 运行"""
+        runner = WorkflowRunner(planner=mock_planner)
+        
+        # Mock dynamic_builder
+        mock_app = Mock()
+        mock_app.ainvoke = AsyncMock(return_value={
             "task": "test",
-            "current_stage": "completed",
-            "iteration_count": 1,
-            "total_cost": 0.1,
+            "verification_passed": True,
         })
+        
+        mock_builder = Mock()
+        mock_builder.from_plan = Mock(return_value=Mock(build=Mock(return_value=mock_app)))
+        
+        runner.dynamic_builder = mock_builder
         
         result = await runner.run("test task", "./project/")
         
         assert result["success"] is True
         assert "thread_id" in result
     
-    @pytest.mark.asyncio
-    @patch("src.workflows.builder.LANGGRAPH_AVAILABLE", True)
-    async def test_run_until_interrupt(self):
-        """测试运行直到中断"""
-        runner = WorkflowRunner(api_key="test-key")
-        
-        runner.app = Mock()
-        runner.app.ainvoke = AsyncMock(return_value={
-            "task": "test",
-            "current_stage": "review",
-            "messages": [{"role": "develop", "content": "done"}],
-        })
-        runner.app.get_state = Mock(return_value=Mock(
-            values={"current_stage": "review"},
-            next=["human_review"]
-        ))
-        
-        result = await runner.run_until_interrupt("test task")
-        
-        assert "thread_id" in result
-        assert "next_steps" in result
-    
-    @pytest.mark.asyncio
-    @patch("src.workflows.builder.LANGGRAPH_AVAILABLE", True)
-    async def test_resume(self):
-        """测试恢复执行"""
-        runner = WorkflowRunner(api_key="test-key")
-        
-        runner.app = Mock()
-        runner.app.update_state = Mock()
-        runner.app.ainvoke = AsyncMock(return_value={
-            "task": "test",
-            "current_stage": "completed",
-        })
-        
-        runner._executions["test_thread"] = {
-            "task": "test",
-            "start_time": "2024-01-01",
-        }
-        
-        result = await runner.resume("test_thread", approval=True, comment="通过")
-        
-        assert result["success"] is True
-        assert result["approval_result"]["approved"] is True
-    
-    @patch("src.workflows.builder.LANGGRAPH_AVAILABLE", True)
-    def test_get_state(self):
+    def test_get_state(self, mock_planner):
         """测试获取状态"""
-        runner = WorkflowRunner(api_key="test-key")
+        runner = WorkflowRunner(planner=mock_planner)
         
-        runner.app = Mock()
-        runner.app.get_state = Mock(return_value=Mock(
-            values={"task": "test", "current_stage": "develop"},
-            next=["review"],
-            created_at="2024-01-01",
-            parent_config=None
-        ))
+        # Run creates an entry in _executions
+        state = runner.get_state("nonexistent_thread")
         
-        state = runner.get_state("test_thread")
-        
-        assert state["values"]["task"] == "test"
-        assert state["next"] == ["review"]
+        assert state["thread_id"] == "nonexistent_thread"
+        assert "error" in state
     
-    @patch("src.workflows.builder.LANGGRAPH_AVAILABLE", True)
-    def test_list_executions(self):
+    def test_list_executions(self, mock_planner):
         """测试列出执行"""
-        runner = WorkflowRunner(api_key="test-key")
+        runner = WorkflowRunner(planner=mock_planner)
         
         runner._executions = {
             "thread_1": {"task": "task1", "status": "completed"},
@@ -122,15 +89,37 @@ class TestWorkflowRunner:
         executions = runner.list_executions()
         
         assert len(executions) == 2
+    
+    def test_with_clarifier(self, mock_planner):
+        """测试传入 clarifier"""
+        clarifier = Mock()
+        clarifier.analyze = AsyncMock()
+        
+        runner = WorkflowRunner(planner=mock_planner, clarifier=clarifier)
+        
+        assert runner.clarifier is clarifier
+
+
+@pytest.fixture
+def shared_mock_planner():
+    """Shared mock planner fixture"""
+    planner = Mock()
+    planner.generate_plan = AsyncMock(return_value=Mock(
+        id="plan_123",
+        nodes={"node1": Mock()},
+        edges=[],
+        plan_type="development",
+    ))
+    planner.validate_plan = Mock(return_value=(True, []))
+    return planner
 
 
 class TestRunPipeline:
     """测试便捷函数"""
     
     @pytest.mark.asyncio
-    @patch("src.workflows.builder.LANGGRAPH_AVAILABLE", True)
-    async def test_run_pipeline_no_review(self):
-        """测试无人工审批运行"""
+    async def test_run_pipeline(self, shared_mock_planner):
+        """测试运行流水线"""
         with patch("src.workflows.runner.WorkflowRunner") as mock_runner_class:
             mock_runner = Mock()
             mock_runner.run = AsyncMock(return_value={
@@ -142,7 +131,7 @@ class TestRunPipeline:
             
             result = await run_pipeline(
                 task="test",
-                enable_human_review=False
+                planner=shared_mock_planner,
             )
             
             assert result["success"] is True
