@@ -196,11 +196,11 @@ class TestServerClarifierInitialization:
         from src.api.routes.clarification import router
 
         routes = [route.path for route in router.routes]
-        assert "/api/clarification/analyze" in routes
+        assert "/clarification/analyze" in routes
 
     def test_clarification_router_has_dimensions_endpoint(self):
         """clarification router 应该有 dimensions 端点"""
         from src.api.routes.clarification import router
 
         routes = [route.path for route in router.routes]
-        assert "/api/clarification/dimensions" in routes
+        assert "/clarification/dimensions" in routes

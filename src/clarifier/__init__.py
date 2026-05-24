@@ -9,6 +9,7 @@ src/clarifier/
 └── result.py          # 数据模型
 """
 
+from .agent import ClarifierAgent, create_clarifier
 from .dimensions import (
     CLARIFICATION_DIMENSIONS,
     DEFAULT_WEIGHTS,
@@ -23,7 +24,6 @@ from .dimensions import (
     get_weights_for_task_type,
 )
 from .result import Assumption, ClarificationQuestion, ClarifierResult
-from .agent import ClarifierAgent, create_clarifier
 
 __all__ = [
     # Agent

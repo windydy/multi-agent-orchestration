@@ -4,8 +4,7 @@ Phase 9: ClarifierAgent — 数据模型
 定义 ClarifierResult、ClarificationQuestion、Assumption 等数据类。
 """
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 
 @dataclass
@@ -14,7 +13,7 @@ class ClarificationQuestion:
     dimension: str          # 维度名 (如 "functional_scope")
     question: str           # 问题文本
     importance: str = "medium"  # "high" / "medium" / "low"
-    user_answer: Optional[str] = None  # 用户回复（交互模式）
+    user_answer: str | None = None  # 用户回复（交互模式）
 
     @property
     def dimension_label(self) -> str:

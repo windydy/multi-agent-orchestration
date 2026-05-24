@@ -6,12 +6,10 @@ Phase 9: ClarifierAgent — 需求澄清 Agent
 
 import json
 import re
-from typing import Optional
 
-from ..core.agent import AgentConfig, AgentRole, AgentResult, BaseAgent
+from ..core.agent import AgentConfig, AgentResult, AgentRole, BaseAgent
 from .dimensions import (
     CLARIFICATION_DIMENSIONS,
-    DEFAULT_WEIGHTS,
     DimensionScore,
     calculate_total_score,
     get_low_score_dimensions,
@@ -71,7 +69,7 @@ class ClarifierAgent(BaseAgent):
     async def analyze(
         self,
         task: str,
-        task_type: Optional[str] = None,
+        task_type: str | None = None,
     ) -> ClarifierResult:
         """分析用户输入的完整性
 
@@ -128,7 +126,7 @@ class ClarifierAgent(BaseAgent):
         self,
         original_task: str,
         user_answers: dict[str, str],
-        task_type: Optional[str] = None,
+        task_type: str | None = None,
     ) -> ClarifierResult:
         """根据用户回复重新评估
 
@@ -582,7 +580,7 @@ class ClarifierAgent(BaseAgent):
         except (json.JSONDecodeError, ValueError):
             return [], ""
 
-    def _extract_json(self, text: str) -> Optional[str]:
+    def _extract_json(self, text: str) -> str | None:
         """从文本中提取 JSON 字符串"""
         # 尝试提取 ```json ... ``` 块
         match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)

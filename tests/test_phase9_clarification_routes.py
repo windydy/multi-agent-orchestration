@@ -47,7 +47,7 @@ class TestAnalyzeEndpoint:
     def test_analyze_vague_task(self, client):
         """模糊任务应该返回低分和澄清问题"""
         response = client.post(
-            "/api/clarification/analyze",
+            "/clarification/analyze",
             json={"task": "帮我做一个电商网站"},
         )
 
@@ -73,7 +73,7 @@ class TestAnalyzeEndpoint:
         )
 
         response = client.post(
-            "/api/clarification/analyze",
+            "/clarification/analyze",
             json={"task": clear_task},
         )
 
@@ -88,7 +88,7 @@ class TestAnalyzeEndpoint:
     def test_analyze_with_task_type(self, client):
         """支持指定任务类型"""
         response = client.post(
-            "/api/clarification/analyze",
+            "/clarification/analyze",
             json={
                 "task": "帮我做一个网站",
                 "task_type": "design",
@@ -102,7 +102,7 @@ class TestAnalyzeEndpoint:
     def test_analyze_returns_dimensions(self, client):
         """应该返回 9 个维度的评分"""
         response = client.post(
-            "/api/clarification/analyze",
+            "/clarification/analyze",
             json={"task": "测试任务"},
         )
 
@@ -119,7 +119,7 @@ class TestAnalyzeEndpoint:
     def test_analyze_empty_task_fails(self, client):
         """空任务应该返回 422"""
         response = client.post(
-            "/api/clarification/analyze",
+            "/clarification/analyze",
             json={"task": ""},
         )
 
@@ -128,7 +128,7 @@ class TestAnalyzeEndpoint:
     def test_analyze_missing_task_fails(self, client):
         """缺少任务字段应该返回 422"""
         response = client.post(
-            "/api/clarification/analyze",
+            "/clarification/analyze",
             json={},
         )
 
@@ -144,7 +144,7 @@ class TestDimensionsEndpoint:
 
     def test_get_dimensions(self, client):
         """应该返回 9 个维度定义"""
-        response = client.get("/api/clarification/dimensions")
+        response = client.get("/clarification/dimensions")
 
         assert response.status_code == 200
         data = response.json()
@@ -154,7 +154,7 @@ class TestDimensionsEndpoint:
 
     def test_dimension_structure(self, client):
         """每个维度应该有正确的结构"""
-        response = client.get("/api/clarification/dimensions")
+        response = client.get("/clarification/dimensions")
 
         assert response.status_code == 200
         data = response.json()
@@ -169,7 +169,7 @@ class TestDimensionsEndpoint:
 
     def test_dimension_names(self, client):
         """维度名称应该正确"""
-        response = client.get("/api/clarification/dimensions")
+        response = client.get("/clarification/dimensions")
 
         assert response.status_code == 200
         data = response.json()
@@ -181,6 +181,77 @@ class TestDimensionsEndpoint:
         }
         actual_names = {dim["name"] for dim in data["dimensions"]}
         assert actual_names == expected_names
+
+
+# ============================================================
+# POST /api/clarification/re-evaluate 测试
+# ============================================================
+
+class TestReEvaluateEndpoint:
+    """POST /api/clarification/re-evaluate 测试"""
+
+    def test_re_evaluate_with_answers(self, client):
+        """提供用户答案后应该重新评分"""
+        response = client.post(
+            "/clarification/re-evaluate",
+            json={
+                "original_task": "帮我做一个网站",
+                "user_answers": {
+                    "functional_scope": "需要用户注册、登录、商品展示功能",
+                    "target_users": "面向普通消费者",
+                    "tech_constraints": "使用 React 前端和 Node.js 后端",
+                },
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "score" in data
+        assert 0 <= data["score"] <= 100
+        assert data["recommendation"] in ("skip", "conservative", "interactive")
+        assert "dimensions" in data
+        assert data["raw_input"] == "帮我做一个网站"
+
+    def test_re_evaluate_empty_answers(self, client):
+        """空答案应该仍然返回结果"""
+        response = client.post(
+            "/clarification/re-evaluate",
+            json={
+                "original_task": "测试任务",
+                "user_answers": {},
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "score" in data
+
+    def test_re_evaluate_with_task_type(self, client):
+        """支持指定任务类型"""
+        response = client.post(
+            "/clarification/re-evaluate",
+            json={
+                "original_task": "测试任务",
+                "user_answers": {"functional_scope": "简单功能"},
+                "task_type": "data_analysis",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["task_type"] == "data_analysis"
+
+    def test_re_evaluate_missing_original_task_fails(self, client):
+        """缺少 original_task 应该返回 422"""
+        response = client.post(
+            "/clarification/re-evaluate",
+            json={
+                "user_answers": {},
+            },
+        )
+
+        assert response.status_code == 422
 
 
 # ============================================================

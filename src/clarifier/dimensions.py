@@ -4,8 +4,7 @@ Phase 9: ClarifierAgent — 9 维度评分模型
 定义需求澄清的 9 个评估维度、评分计算和判定逻辑。
 """
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 
 @dataclass
@@ -24,7 +23,7 @@ class DimensionScore:
     dimension: str      # 维度名
     score: int          # 1-5 分
     reason: str = ""    # 评分理由
-    question: Optional[str] = None  # 如需澄清，生成的问题
+    question: str | None = None  # 如需澄清，生成的问题
 
 
 # 9 个澄清维度定义
@@ -143,7 +142,7 @@ THRESHOLD_CLARIFY: float = 50.0   # 50-79 需要澄清，< 50 强烈建议交互
 
 def calculate_total_score(
     dimension_scores: dict[str, DimensionScore],
-    weights: Optional[dict[str, float]] = None,
+    weights: dict[str, float] | None = None,
 ) -> float:
     """计算加权总分 (0-100)
 
