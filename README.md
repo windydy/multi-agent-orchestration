@@ -82,18 +82,27 @@ Checkpoints / Memory / Observability / Integrations
 
 ## 快速开始
 
-### 1. 准备 Python 环境
+### 1. 本地安装
+
+推荐使用项目安装脚本创建虚拟环境、安装 Python 依赖和 Web 依赖：
 
 ```bash
-python -m venv .venv
+scripts/install.sh --build-web
 source .venv/bin/activate
-pip install -e ".[dev]"
 ```
 
-Dashboard 后端当前源码还使用 FastAPI/Uvicorn 等运行时依赖；如果本地环境没有这些包，请补充安装：
+运行时/生产安装可以跳过开发依赖：
 
 ```bash
-pip install fastapi uvicorn aiofiles pytest-cov
+scripts/install.sh --prod --build-web
+source .venv/bin/activate
+```
+
+如果只需要后端和 CLI，可以跳过 Web 依赖：
+
+```bash
+scripts/install.sh --no-web
+source .venv/bin/activate
 ```
 
 ### 2. 配置模型密钥
@@ -121,11 +130,26 @@ python -m src.cli.main visualize
 
 CLI 会把最近一次执行的 thread id 写入 `.pipeline_thread_YYYYMMDD.txt`。
 
-### 4. 运行 API 后端
+### 4. 运行 API 后端与 Dashboard
 
 ```bash
 python -m uvicorn src.api.server:app --reload --host 0.0.0.0 --port 8000
 ```
+
+如果已经执行过 `scripts/install.sh --build-web` 或 `scripts/package.sh`，后端会挂载生产版 Web UI。启动后访问：
+
+```text
+http://127.0.0.1:8000
+```
+
+常用页面：
+
+| 页面 | 路径 |
+| --- | --- |
+| Dashboard 首页 | `/` |
+| 执行详情 | `/executions/<thread_id>` |
+| 配置管理 | `/config` |
+| 可观测性 | `/observability` |
 
 常用接口：
 
@@ -160,7 +184,34 @@ python -m uvicorn src.api.server:app --host 0.0.0.0 --port 8000
 
 后端会在存在 `web/dist` 时挂载 SPA 静态资源。
 
-### 6. Docker
+### 6. 打包与从包安装
+
+生成发布归档：
+
+```bash
+scripts/package.sh --version local
+```
+
+打包脚本会生成：
+
+```text
+dist/packages/multi-agent-orchestration-local.tar.gz
+dist/packages/multi-agent-orchestration-local.tar.gz.sha256
+```
+
+从归档安装并运行：
+
+```bash
+tar -xzf dist/packages/multi-agent-orchestration-local.tar.gz
+cd multi-agent-orchestration-local
+scripts/install.sh --prod --build-web
+source .venv/bin/activate
+python -m uvicorn src.api.server:app --host 0.0.0.0 --port 8000
+```
+
+然后访问 `http://127.0.0.1:8000`。
+
+### 7. Docker
 
 ```bash
 docker compose --profile dev up dev

@@ -17,6 +17,10 @@ import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# ── 初始化日志 ──
+from src.logging_config import setup_logging
+setup_logging(level="INFO")
+
 
 async def demo_e2e_pipeline():
     """端到端流水线执行 demo"""

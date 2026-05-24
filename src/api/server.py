@@ -8,6 +8,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 
+# ── 初始化日志 ──
+from src.logging_config import setup_logging
+setup_logging(level="INFO")
+
 from .services.event_log import EventLog
 from .services.execution_manager import ExecutionManager
 from .services.config_store import ConfigStore

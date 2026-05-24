@@ -11,6 +11,10 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# ── 初始化日志 ──
+from src.logging_config import setup_logging
+setup_logging(level="INFO")
+
 from src.workflows.runner import run_pipeline
 
 

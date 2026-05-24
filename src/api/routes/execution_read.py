@@ -83,7 +83,7 @@ def _build_nodes(events: list[dict]) -> list[NodeEvent]:
 @router.get("/executions", response_model=ExecutionListResponse)
 async def list_executions(limit: int = 20, offset: int = 0, status: str | None = None):
     log = _get_log()
-    executions = log.list_executions(limit=limit, offset=offset)
+    print(f"[DEBUG] list_executions: db_path={log.db_path}, executions={log.list_executions()}", flush=True)
 
     items: list[ExecutionItem] = []
     for ex in executions:

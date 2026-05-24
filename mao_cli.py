@@ -17,6 +17,7 @@ if _PROJECT_ROOT not in sys.path:
 
 from src.plan.planner import PlannerAgent
 from src.workflows.runner import WorkflowRunner, print_state_summary
+from src.logging_config import setup_logging
 
 
 def main():
@@ -24,6 +25,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Multi-Agent Orchestration CLI — Planner-driven workflow"
     )
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="显示 DEBUG 级别日志")
     
     subparsers = parser.add_subparsers(dest="command", help="可用命令")
     
@@ -42,6 +45,9 @@ def main():
     list_parser = subparsers.add_parser("list", help="列出当前进程的执行记录")
     
     args = parser.parse_args()
+    
+    # 初始化日志
+    setup_logging(level="DEBUG" if args.verbose else "INFO")
     
     if args.command == "run":
         asyncio.run(run_command(args))

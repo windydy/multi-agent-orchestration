@@ -1,0 +1,45 @@
+# 真实测试需求：事件导出 API
+
+## 任务描述
+
+为系统新增执行事件导出功能，支持将执行历史记录导出为 JSON 或 CSV 格式。
+
+### 功能要求
+
+1. **新增端点**：`GET /api/events/export`
+2. **查询参数**：
+   - `thread_id`（可选）：指定执行 ID
+   - `format`（可选，默认 json）：输出格式（json / csv）
+   - `since`（可选）：起始时间戳（ISO 格式）
+   - `limit`（可选，默认 100）：最大返回数量
+3. **行为**：
+   - 从 EventLog 读取事件记录
+   - 按时间倒序返回
+   - 支持按 thread_id 过滤
+   - 支持时间范围过滤
+   - CSV 格式包含表头行
+
+### 验收标准
+
+1. `GET /api/events/export` 返回 200
+2. 默认返回 JSON 格式，包含事件列表
+3. `?format=csv` 返回 CSV 格式（Content-Type: text/csv）
+4. `?thread_id=xxx` 只返回指定执行的事件
+5. `?limit=5` 限制返回数量
+6. 新增 `tests/api/test_events_export.py` 全部通过
+7. 所有现有测试无回归
+8. ruff check 零新增错误
+
+### 隔离
+
+```bash
+git worktree add .worktrees/feature-events-export -b feature/events-export-api
+```
+
+### 验证
+
+```bash
+pytest tests/api/test_events_export.py -v
+pytest tests/ --ignore=tests/ui/ --ignore=tests/knowledge/ --tb=no -q
+ruff check src/api/routes/events_export.py tests/api/test_events_export.py
+```
