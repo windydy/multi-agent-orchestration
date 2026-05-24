@@ -1,0 +1,32 @@
+{
+  "report_id": "self-dev-20260524-1656",
+  "task_title": "新增 AgentMemory 查询 API",
+  "branch": "feature/memory-search-api",
+  "generated_at": "2026-05-24T16:56:39.266640",
+  "metrics": {
+    "code_quality": {
+      "lint_errors": 1,
+      "lint_warnings": 0,
+      "passed": false
+    },
+    "test_quality": {
+      "tests_passed": 0,
+      "tests_failed": 0,
+      "tests_skipped": 19,
+      "passed": true
+    },
+    "security_compliance": {
+      "unsafe_files_modified": [],
+      "review_required_files_modified": [],
+      "passed": true
+    }
+  },
+  "status": "failed",
+  "summary": {
+    "all_passed": false,
+    "issues": [
+      "code_quality check failed"
+    ],
+    "recommendation": "needs_review"
+  }
+}

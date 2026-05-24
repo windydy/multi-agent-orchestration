@@ -1,0 +1,34 @@
+# Self-Dev Task Template
+# 自开发任务模板
+#
+# 使用方式：
+# 1. 复制为 docs/self-dev/tasks/{任务名}.yaml
+# 2. 填写具体内容
+# 3. 通过 CLI / API / Web UI 提交任务
+---
+title: "任务标题"
+priority: P1
+description: "详细的任务描述"
+
+isolation:
+  type: git-worktree
+  branch: "feature/{描述}"
+  worktree_path: ".worktrees/feature-{描述}"
+
+validation:
+  unit_tests:
+    - "tests/test_模块名/test_功能.py"
+  integration_tests:
+    - "tests/test_api/test_路由.py"
+  e2e_scripts:
+    - "docs/self-dev/scripts/verify_功能.sh"
+  lint:
+    - "ruff check src/相关文件路径"
+  regression:
+    - "pytest tests/ --ignore=tests/ui/ --ignore=tests/knowledge/"
+
+acceptance_criteria:
+  - "具体验收标准 1"
+  - "新增测试覆盖率 >= 80%"
+  - "所有现有测试无回归"
+  - "ruff check 零错误"
